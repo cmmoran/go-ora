@@ -2,6 +2,8 @@ module github.com/sijms/go-ora
 
 go 1.18
 
+replace github.com/sijms/go-ora/v2 => github.com/cmmoran/go-ora/v2 v2.0.0-20250712113541-52e3d8dc8c48
+
 require (
 	github.com/jcmturner/gokrb5/v8 v8.4.4
 	github.com/sijms/go-ora/v2 v2.8.19

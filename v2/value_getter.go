@@ -1,12 +1,15 @@
 package go_ora
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
 	"time"
+
+	"github.com/sijms/go-ora/v2/converters"
 )
 
 // ======== get primitive data from original data types ========//
@@ -23,6 +26,17 @@ func getValue(origVal driver.Value) (driver.Value, error) {
 	proVal := reflect.Indirect(rOriginal)
 	if valuer, ok := proVal.Interface().(driver.Valuer); ok {
 		return valuer.Value()
+	}
+	if proVal.Kind() == reflect.String {
+		if b, bytesOverride := converters.EncodeUUIDLike(proVal.Interface().(string)); bytesOverride {
+			return b, nil
+		}
+	} else if proVal.Type() == reflect.TypeOf((*sql.NullString)(nil)).Elem() {
+		if proVal.Interface().(sql.NullString).Valid {
+			if b, bytesOverride := converters.EncodeUUIDLike(proVal.Interface().(sql.NullString).String); bytesOverride {
+				return b, nil
+			}
+		}
 	}
 	return proVal.Interface(), nil
 }

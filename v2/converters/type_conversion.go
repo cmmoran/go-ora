@@ -10,6 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 )
 
 const (
@@ -1111,6 +1114,27 @@ var oracleZones = map[int]string{
 	// 990:  "US/Samoa",
 	// 465:  "Pacific/Yap",
 	// 365:  "WET",
+}
+
+func EncodeUUIDLike(uuidLike string) ([]byte, bool) {
+	if strings.Contains(uuidLike, "-") {
+		if u, err := uuid.Parse(uuidLike); err != nil {
+			return []byte(uuidLike), false
+		} else {
+			return u[:], true
+		}
+	} else {
+		if u, err := uuid.Parse(uuidLike); err != nil {
+			var ul ulid.ULID
+			if ul, err = ulid.Parse(uuidLike); err != nil {
+				return []byte(uuidLike), false
+			} else {
+				return ul.Bytes(), true
+			}
+		} else {
+			return u[:], true
+		}
+	}
 }
 
 // EncodeDate convert time.Time into oracle representation

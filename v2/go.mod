@@ -1,10 +1,15 @@
 module github.com/sijms/go-ora/v2
 
-go 1.18
+go 1.24.4
+
+replace github.com/sijms/go-ora => github.com/cmmoran/go-ora v0.0.0-20250712113541-52e3d8dc8c48
 
 require (
-	github.com/godoes/gorm-oracle v1.6.11
-	gorm.io/gorm v1.25.11
+	github.com/godoes/gorm-oracle v1.6.17
+	github.com/google/uuid v1.6.0
+	github.com/oklog/ulid/v2 v2.1.1
+	github.com/sijms/go-ora v0.0.0-00010101000000-000000000000
+	gorm.io/gorm v1.30.0
 	xorm.io/xorm v1.3.9
 )
 
@@ -17,7 +22,8 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/syndtr/goleveldb v1.0.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/text v0.26.0 // indirect
 	xorm.io/builder v0.3.11-0.20220531020008-1bd24a7dc978 // indirect
 )

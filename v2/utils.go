@@ -15,6 +15,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/sijms/go-ora/v2/lazy_init"
 
 	"github.com/sijms/go-ora/v2/network"
@@ -54,6 +57,7 @@ var (
 	tyFloat32Array    = reflect.TypeOf((*[]float32)(nil)).Elem()
 	tyUint8Array      = reflect.TypeOf((*[]uint8)(nil)).Elem()
 	tyFloat64Array    = reflect.TypeOf((*[]float64)(nil)).Elem()
+	tyUUID            = reflect.TypeOf((*[16]byte)(nil)).Elem()
 )
 
 func refineSqlText(text string) string {
@@ -236,6 +240,33 @@ func tNullNumber(input reflect.Type) bool {
 		return true
 	}
 	return false
+}
+
+func tUUIDLike(data driver.Value) ([]byte, bool) {
+	if data == nil {
+		return nil, false
+	}
+	rv := reflect.Indirect(reflect.ValueOf(data))
+	if !rv.IsValid() {
+		return nil, false
+	}
+	if tyUUID.AssignableTo(rv.Type()) {
+		out := make([]byte, 16)
+		for i := 0; i < 16; i++ {
+			out[i] = byte(rv.Index(i).Uint())
+		}
+		return out, true
+	}
+	if rv.Kind() == reflect.String {
+		if b, err := uuid.Parse(rv.String()); err == nil {
+			return b[:], true
+		}
+		if b, err := ulid.Parse(rv.String()); err == nil {
+			return b[:], true
+		}
+	}
+
+	return nil, false
 }
 
 func processReset(err error, conn *Connection) error {
