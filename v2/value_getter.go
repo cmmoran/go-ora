@@ -24,6 +24,9 @@ func getValue(origVal driver.Value) (driver.Value, error) {
 		return nil, nil
 	}
 	proVal := reflect.Indirect(rOriginal)
+	if proVal.Kind() == reflect.Ptr && proVal.IsNil() {
+		proVal = reflect.New(proVal.Type().Elem())
+	}
 	if valuer, ok := proVal.Interface().(driver.Valuer); ok {
 		return valuer.Value()
 	}

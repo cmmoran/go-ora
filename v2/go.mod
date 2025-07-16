@@ -2,13 +2,10 @@ module github.com/sijms/go-ora/v2
 
 go 1.24.4
 
-replace github.com/sijms/go-ora => github.com/cmmoran/go-ora v0.0.0-20250712113541-52e3d8dc8c48
-
 require (
 	github.com/godoes/gorm-oracle v1.6.17
 	github.com/google/uuid v1.6.0
 	github.com/oklog/ulid/v2 v2.1.1
-	github.com/sijms/go-ora v0.0.0-00010101000000-000000000000
 	gorm.io/gorm v1.30.0
 	xorm.io/xorm v1.3.9
 )

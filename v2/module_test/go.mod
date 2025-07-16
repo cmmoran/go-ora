@@ -1,6 +1,6 @@
 module v2_test
 
-go 1.17
+go 1.24.5
 
 replace github.com/sijms/go-ora/v2 => ../
 

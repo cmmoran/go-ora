@@ -239,12 +239,12 @@ func main() {
 			fmt.Println("Can't drop table: ", err)
 		}
 	}()
-	err = conn.RegisterType("UDTPAR_TYPE", "", test2{})
-	if err != nil {
-		fmt.Println("Can't register UDT: ", err)
-		return
-	}
-	fmt.Println("UDT registered successfully")
+	//err = conn.RegisterType("UDTPAR_TYPE", "", test2{})
+	//if err != nil {
+	//	fmt.Println("Can't register UDT: ", err)
+	//	return
+	//}
+	//fmt.Println("UDT registered successfully")
 
 	err = insertData(conn)
 	if err != nil {

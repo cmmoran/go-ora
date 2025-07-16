@@ -54,8 +54,8 @@ func TestURowid(t *testing.T) {
 	stmt._hasBLOB = false
 	stmt._hasLONG = false
 	stmt.arrayBindCount = 0
-	dataSet := new(DataSet)
-	err := stmt.read(dataSet)
+	dataSet := ResultSet{}
+	err := stmt.read(&dataSet)
 	if err != nil {
 		t.Error(err)
 	}
