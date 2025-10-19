@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sijms/go-ora/v2/configurations"
-	"github.com/sijms/go-ora/v2/converters"
-	"github.com/sijms/go-ora/v2/network"
-	"github.com/sijms/go-ora/v2/trace"
+	"github.com/cmmoran/go-ora/v2/configurations"
+	"github.com/cmmoran/go-ora/v2/converters"
+	"github.com/cmmoran/go-ora/v2/network"
+	"github.com/cmmoran/go-ora/v2/trace"
 )
 
 var buffer = `00000000  00 00 01 93 06 00 00 00  00 00 10 17 30 77 d7 6c  |............0w.l|

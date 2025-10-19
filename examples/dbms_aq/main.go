@@ -3,9 +3,9 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"github.com/sijms/go-ora/dbms"
-	_ "github.com/sijms/go-ora/v2"
-	go_ora "github.com/sijms/go-ora/v2"
+	"github.com/cmmoran/go-ora/dbms"
+	"github.com/cmmoran/go-ora/v2"
+	_ "github.com/cmmoran/go-ora/v2"
 	"os"
 	"sync"
 	"time"

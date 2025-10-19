@@ -10,9 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
-	"github.com/oklog/ulid/v2"
 )
 
 const (
@@ -1116,25 +1113,43 @@ var oracleZones = map[int]string{
 	// 365:  "WET",
 }
 
-func EncodeUUIDLike(uuidLike string) ([]byte, bool) {
-	if strings.Contains(uuidLike, "-") {
-		if u, err := uuid.Parse(uuidLike); err != nil {
-			return []byte(uuidLike), false
-		} else {
-			return u[:], true
-		}
-	} else {
-		if u, err := uuid.Parse(uuidLike); err != nil {
-			var ul ulid.ULID
-			if ul, err = ulid.Parse(uuidLike); err != nil {
-				return []byte(uuidLike), false
-			} else {
-				return ul.Bytes(), true
+func EncodeUUIDLike(s string) ([]byte, bool) {
+	if strings.ContainsRune(s, '-') {
+		buf := make([]byte, 0, 32)
+		for i := 0; i < len(s); i++ {
+			if s[i] != '-' {
+				buf = append(buf, s[i])
 			}
-		} else {
-			return u[:], true
 		}
+		s = string(buf)
 	}
+
+	if len(s) == 32 {
+		out := make([]byte, 16)
+		for i := 0; i < 16; i++ {
+			h1, ok1 := fromHex(s[i*2])
+			h2, ok2 := fromHex(s[i*2+1])
+			if !ok1 || !ok2 {
+				goto notuuid
+			}
+			out[i] = (h1 << 4) | h2
+		}
+		return out, true
+	}
+notuuid:
+	return nil, false
+}
+
+func fromHex(r byte) (byte, bool) {
+	switch {
+	case '0' <= r && r <= '9':
+		return r - '0', true
+	case 'a' <= r && r <= 'f':
+		return r - 'a' + 10, true
+	case 'A' <= r && r <= 'F':
+		return r - 'A' + 10, true
+	}
+	return 0, false
 }
 
 // EncodeDate convert time.Time into oracle representation

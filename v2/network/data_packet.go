@@ -6,7 +6,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/sijms/go-ora/v2/trace"
+	"github.com/cmmoran/go-ora/v2/trace"
 )
 
 type DataPacket struct {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/sijms/go-ora/v2"
+	_ "github.com/cmmoran/go-ora/v2"
 )
 
 var longText = strings.Repeat("*", 0x3FFF)

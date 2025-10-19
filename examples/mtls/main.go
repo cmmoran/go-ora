@@ -9,7 +9,7 @@ import (
 	"log"
 	"os"
 
-	go_ora "github.com/sijms/go-ora/v2"
+	"github.com/cmmoran/go-ora/v2"
 )
 
 func databaseConn(addr, serviceName string, tlsConfig *tls.Config) error {

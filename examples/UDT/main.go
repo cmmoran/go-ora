@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	go_ora "github.com/sijms/go-ora/v2"
+	"github.com/cmmoran/go-ora/v2"
 )
 
 type test1 struct {

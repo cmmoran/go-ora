@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/sijms/go-ora/v2"
+	_ "github.com/cmmoran/go-ora/v2"
 )
 
 func generatePlaceholders(n int) string {
