@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cmmoran/go-ora/network"
+	"github.com/cmmoran/go-ora/v2/network"
 )
 
 type TCPNego struct {
@@ -21,6 +21,7 @@ type TCPNego struct {
 	ServerRuntimeCaps     []byte
 }
 
+// newTCPNego create TCPNego object by reading data from network session
 func newTCPNego(session *network.Session) (*TCPNego, error) {
 	session.ResetBuffer()
 	session.PutBytes(1, 6, 0)
@@ -105,13 +106,15 @@ func newTCPNego(session *network.Session) (*TCPNego, error) {
 	if len(result.ServerCompileTimeCaps) > 16 && result.ServerCompileTimeCaps[16]&1 != 0 {
 		session.HasFSAPCapability = true
 	}
-	return &result, nil
-}
-
-func (nego *TCPNego) hasCompileTimeCaps(pos, val int) bool {
-	result := false
-	if len(nego.ServerCompileTimeCaps) > pos && nego.ServerCompileTimeCaps[pos]&uint8(val) != 0 {
-		result = true
+	if result.ServerCompileTimeCaps == nil || len(result.ServerCompileTimeCaps) < 8 {
+		return nil, errors.New("server compile time caps length less than 8")
 	}
-	return result
+	if len(result.ServerCompileTimeCaps) > 37 && result.ServerCompileTimeCaps[37]&32 != 0 {
+		session.UseBigClrChunks = true
+		session.ClrChunkSize = 0x7FFF
+	}
+	// this.m_b32kTypeSupported = this.m_dtyNeg.m_b32kTypeSupported;
+	// this.m_bSupportSessionStateOps = this.m_dtyNeg.m_bSupportSessionStateOps;
+	// this.m_marshallingEngine.m_bServerUsingBigSCN = this.m_serverCompiletimeCapabilities[7] >= (byte) 8;
+	return &result, nil
 }

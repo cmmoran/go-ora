@@ -12,7 +12,7 @@ import (
 	"crypto/md5"
 	"strings"
 
-	"github.com/cmmoran/go-ora/network/security/md4"
+	"github.com/cmmoran/go-ora/v2/network/security/md4"
 )
 
 func getNtlmV2Hash(password, username, target string) []byte {

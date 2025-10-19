@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 
-	"github.com/cmmoran/go-ora/advanced_nego/ntlmssp"
+	"github.com/cmmoran/go-ora/v2/advanced_nego/ntlmssp"
 )
 
 type NTSAuthInterface interface {

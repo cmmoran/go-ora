@@ -4,7 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cmmoran/go-ora/network/security"
+	"github.com/cmmoran/go-ora/v2/configurations"
+	"github.com/cmmoran/go-ora/v2/network/security"
 )
 
 type encryptService struct {
@@ -12,10 +13,11 @@ type encryptService struct {
 	algoID int
 }
 
-func NewEncryptService(comm *AdvancedNegoComm) (*encryptService, error) {
+func newEncryptService(comm *AdvancedNegoComm, negoInfo *configurations.AdvNegoServiceInfo) (*encryptService, error) {
 	output := &encryptService{
 		defaultService: defaultService{
 			comm:        comm,
+			level:       negoInfo.EncServiceLevel,
 			serviceType: 2,
 			version:     0xB200200,
 			availableServiceNames: []string{
@@ -25,7 +27,7 @@ func NewEncryptService(comm *AdvancedNegoComm) (*encryptService, error) {
 			availableServiceIDs: []int{0, 1, 8, 10, 6, 3, 2, 11, 12, 15, 16, 17},
 		},
 	}
-	err := output.buildServiceList([]string{"DES56C", "AES128", "AES192", "AES256"}, true, true)
+	err := output.buildServiceList([]string{"RC4_40", "RC4_56", "RC4_128", "RC4_256", "DES56C", "AES128", "AES192", "AES256"}, true, true)
 	// output.selectedServ, err = output.validate(strings.Split(str,","), true)
 	if err != nil {
 		return nil, err
@@ -70,14 +72,23 @@ func (serv *encryptService) getServiceDataLength() int {
 
 func (serv *encryptService) activateAlgorithm() error {
 	key := serv.comm.session.Context.AdvancedService.SessionKey
+	iv := serv.comm.session.Context.AdvancedService.IV
 	// iv := make([]byte, 16)
 	var algo security.OracleNetworkEncryption = nil
 	var err error
 	switch serv.algoID {
 	case 0:
 		return nil
+	case 1:
+		algo, err = security.NewOracleNetworkRC4Cryptor(key, iv, 40)
 	case 2:
 		algo, err = security.NewOracleNetworkDESCryptor(key[:8], nil)
+	case 6:
+		algo, err = security.NewOracleNetworkRC4Cryptor(key, iv, 256)
+	case 8:
+		algo, err = security.NewOracleNetworkRC4Cryptor(key, iv, 56)
+	case 10:
+		algo, err = security.NewOracleNetworkRC4Cryptor(key, iv, 128)
 	case 15:
 		algo, err = security.NewOracleNetworkCBCEncrypter(key[:16], nil)
 	case 16:

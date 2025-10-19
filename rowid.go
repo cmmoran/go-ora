@@ -1,16 +1,18 @@
 package go_ora
 
 import (
-	"github.com/cmmoran/go-ora/network"
+	"github.com/cmmoran/go-ora/v2/network"
 )
 
 type rowid struct {
 	rba         int64
 	partitionID int64
+	filter      byte
 	blockNumber int64
 	slotNumber  int64
 }
 
+// newRowID read rowId from network session
 func newRowID(session *network.Session) (*rowid, error) {
 	temp, err := session.GetByte()
 	if err != nil {
