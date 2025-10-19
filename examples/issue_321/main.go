@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"time"
-
-	_ "github.com/cmmoran/go-ora/v2"
 )
 
 func createTable(conn *sql.DB) error {

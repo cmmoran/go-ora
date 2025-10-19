@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-
-	_ "github.com/cmmoran/go-ora/v2"
 )
 
 func dieOnError(msg string, err error) {

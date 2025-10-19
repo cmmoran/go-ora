@@ -846,7 +846,7 @@ rows, err := go_ora.WrapRefCursor(context.Background(), conn, cursor)
 import (
   "database/sql"
   db_out "github.com/cmmoran/go-ora/dbms_output"
-  _ "github.com/cmmoran/go-ora/v2"
+  
   "os"
 )
 

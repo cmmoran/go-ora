@@ -7,8 +7,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	_ "github.com/cmmoran/go-ora/v2"
 )
 
 //func dieOnError(msg string, err error) {

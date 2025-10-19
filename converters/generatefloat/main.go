@@ -13,8 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
-
-	_ "github.com/cmmoran/go-ora/v2"
 )
 
 var testValues = []struct {
