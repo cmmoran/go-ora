@@ -3,7 +3,7 @@ package go_ora
 import (
 	"database/sql"
 	"fmt"
-	"github.com/sijms/go-ora/v2/converters"
+	"github.com/cmmoran/go-ora/v2/converters"
 	"reflect"
 	"slices"
 	"strconv"

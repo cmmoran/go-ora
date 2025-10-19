@@ -1,21 +1,22 @@
 # go-ora
 # Pure go oracle client
 
+---
+
+# Full Disclosure
+
+This project was originally forked from [github.com/sijms/go-ora](github.com/sijms/go-ora). Go mod replace is cumbersome for downstream projects and missing fixes were needed. That is the reason for the module path change. 
+
 ## note:
 ###### the original oracle drivers are very complex and contain many features which are difficult to add them at one time
 ###### your feedbacks are very important for this project to proceed
 ```
-    - To use version 2 you should import github.com/sijms/go-ora/v2
+    - To use version 2 you should import github.com/cmmoran/go-ora/v2
     - V2 is more preferred for oracle servers 10.2 and above
     - I always update the driver fixing issues and add new features so
       always ensure that you get latest release
     - See examples for more help
 ```
-
-# Sponsors
-<p>
-  <a href="https://jb.gg/OpenSourceSupport" rel="noopener sponsored" target="_blank"><img height="128" width="128" src="https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png?_gl=1*txv9x8*_ga*MzY1MjAzNDI2LjE3MDAzMDc5NTg.*_ga_9J976DJZ68*MTcwNTE3NzM4My4zLjEuMTcwNTE3Nzg1MC40OS4wLjA.&_ga=2.97733338.412104364.1705177384-365203426.1700307958" alt="JetBrains" title="Essential tools for software developers and teams" loading="lazy" /></a>
-</p>
 
 # How To Use
 ## Connect to Database
@@ -86,7 +87,7 @@ connStr := go_ora.BuildUrl("server", port, "service_name", "username", "password
 * ### OS Auth (for windows)
 connect to oracle using OS user instead of oracle user
 username and password parameters passed empty to `BuildUrl`
-see [examples/windows_os_auth](https://github.com/sijms/go-ora/blob/master/examples/windows_os_auth/main.go) for more help
+see [examples/windows_os_auth](https://github.com/cmmoran/go-ora/blob/master/examples/windows_os_auth/main.go) for more help
 ```golang
 urlOptions := map[string]string {
     // optional as it will be automatically set 
@@ -141,7 +142,7 @@ connStr := go_ora.BuildUrl("server", port, "service_name", "", "", urlOptions)
 * kerberos server you can use this link to install [on ubuntu](https://ubuntu.com/server/docs/service-kerberos)
 * oracle server you can configure it from this [link](https://docs.oracle.com/cd/E11882_01/network.112/e40393/asokerb.htm#ASOAG9636)
 * client which contain our gocode using package [gokrb5](https://github.com/jcmturner/gokrb5)
-* Complete code found in [examples/kerberos](https://github.com/sijms/go-ora/blob/master/examples/kerberos/main.go)
+* Complete code found in [examples/kerberos](https://github.com/cmmoran/go-ora/blob/master/examples/kerberos/main.go)
   ```golang
   urlOptions := map[string]string{
       "AUTH TYPE":  "KERBEROS",
@@ -379,7 +380,7 @@ for rows.Next() {
 _, err := conn.Exec("begin DBMS_LOCK.sleep(7); end;")
 // check for errors
 ```
-complete example found in [examples/crud](https://github.com/sijms/go-ora/blob/master/examples/crud/main.go)
+complete example found in [examples/crud](https://github.com/cmmoran/go-ora/blob/master/examples/crud/main.go)
 * ### input parameters
   * #### parameters in oracle should start with `:` for example `:pr1`
 passing input parameters as defined by database/sql package.
@@ -413,7 +414,7 @@ _, err := conn.Exec("SELECT ID, NAME, DAT INTO :pr1, :pr2, :pr3 FROM TABLE1 WHER
 * ### Lob Types
   * Blob, Clob and NClob
   * Clob use database charset and NClob use database ncharset for string encoding and decoding
-  * complete code is found in [examples/clob](https://github.com/sijms/go-ora/blob/master/examples/clob/main.go)
+  * complete code is found in [examples/clob](https://github.com/cmmoran/go-ora/blob/master/examples/clob/main.go)
 > input parameters
 ```golang
 var1 := go_ora.Clob{String: "large string value"}
@@ -450,7 +451,7 @@ _, err := conn.Exec("BEGIN SELECT col1, col2 into :1, :2 FROM tb; END;",
     * IsOpen: check if the file opened
     * GetDirName: return directory object name
     * GetFileName: return file name
-  * complete code for BFile found in [examples/bfile](https://github.com/sijms/go-ora/blob/master/examples/bfile/main.go)
+  * complete code for BFile found in [examples/bfile](https://github.com/cmmoran/go-ora/blob/master/examples/bfile/main.go)
 
 * ### Named Parameters
   * to use named parameters just wrap all you parameters inside `sql.Named`
@@ -458,7 +459,7 @@ _, err := conn.Exec("BEGIN SELECT col1, col2 into :1, :2 FROM tb; END;",
   * parameter named `:pr1` in sql should be passed as `sql.Named("pr1", 1)`
   * Named parameter is useful if you have one value passed in sql multiple times.
   * order is not important
-  * complete code for named parameters found in [examples/named_pars](https://github.com/sijms/go-ora/blob/master/examples/named_pars/main.go)
+  * complete code for named parameters found in [examples/named_pars](https://github.com/cmmoran/go-ora/blob/master/examples/named_pars/main.go)
 
 * ### structures with tag
 you can pass a structure parameter to sql in one of the following situation
@@ -497,19 +498,19 @@ you can pass a structure parameter to sql in one of the following situation
 
 > size and direction are required if the fields mapped to an output parameter
 
-complete code can be found in [examples/struct_par](https://github.com/sijms/go-ora/blob/master/examples/struct_par/main.go)
+complete code can be found in [examples/struct_par](https://github.com/cmmoran/go-ora/blob/master/examples/struct_par/main.go)
 
 * ### Arrays
 > passing array as a parameter is useful in the following situations
 > * Multiple insert/merge
-> * Associative Array. You can find complete code in [examples/array](https://github.com/sijms/go-ora/blob/master/examples/arrays/main.go)
-> * UDT array. You can find complete code in [examples/udt_array](https://github.com/sijms/go-ora/blob/master/examples/udt_array/main.go)
+> * Associative Array. You can find complete code in [examples/array](https://github.com/cmmoran/go-ora/blob/master/examples/arrays/main.go)
+> * UDT array. You can find complete code in [examples/udt_array](https://github.com/cmmoran/go-ora/blob/master/examples/udt_array/main.go)
 
 > Bulk insert/merge will be activated when you 
 > passing all parameters as arrays of same size.
 > 
 > you can also pass an array of tagged structure to do same thing.
-> complete code for bulk-insert/merge can be found in [examples/merge](https://github.com/sijms/go-ora/blob/master/examples/merge/main.go)
+> complete code for bulk-insert/merge can be found in [examples/merge](https://github.com/cmmoran/go-ora/blob/master/examples/merge/main.go)
 > 
 > from version 2.8.24 bulk update/delete also supported
 
@@ -540,12 +541,12 @@ passing typeName, arrayTypeName (for that type or empty) and empty instance of s
 > * to pass oracle object as a parameter efficiently use `go_ora.Object{Owner: owner, Name: name, Value: val}`
 > * regular type array should be passed wrapped inside go_ora.Object otherwise it will be interpreted as associative array
 > * complete code is found in 
->   * [examples/UDT](https://github.com/sijms/go-ora/blob/master/examples/UDT/main.go)
->   * [examples/nested_udt_array](https://github.com/sijms/go-ora/blob/master/examples/nested_udt_array/main.go) a complete example of nested objects (2 level), nested arrays 
+>   * [examples/UDT](https://github.com/cmmoran/go-ora/blob/master/examples/UDT/main.go)
+>   * [examples/nested_udt_array](https://github.com/cmmoran/go-ora/blob/master/examples/nested_udt_array/main.go) a complete example of nested objects (2 level), nested arrays 
 >   as input/output parameters
->   * [examples/regular_type_array](https://github.com/sijms/go-ora/blob/master/examples/regular_type_array/main.go) a complete example for all supported regullar type arrays
->   * [examples/null_udt](https://github.com/sijms/go-ora/blob/master/examples/null_udt/main.go) example represent null object as input and output
->   * [examples/varray](https://github.com/sijms/go-ora/blob/master/examples/varray/main.go) for varray types
+>   * [examples/regular_type_array](https://github.com/cmmoran/go-ora/blob/master/examples/regular_type_array/main.go) a complete example for all supported regullar type arrays
+>   * [examples/null_udt](https://github.com/cmmoran/go-ora/blob/master/examples/null_udt/main.go) example represent null object as input and output
+>   * [examples/varray](https://github.com/cmmoran/go-ora/blob/master/examples/varray/main.go) for varray types
 
 * ### Vector
 > support start from client v2.8.25. (require oracle server v23ai)
@@ -596,7 +597,7 @@ passing typeName, arrayTypeName (for that type or empty) and empty instance of s
 > ```
 > you can use `go_ora.WrapRefCursor(...)` to convert `*RefCursor` into `*sql.Rows` started from v2.7.17
 
-> complete code for RefCursor as output parameter found in [examples/refcursor](https://github.com/sijms/go-ora/blob/master/examples/refcursor/main.go)
+> complete code for RefCursor as output parameter found in [examples/refcursor](https://github.com/cmmoran/go-ora/blob/master/examples/refcursor/main.go)
 
 > Map RefCursor to sql.Rows
 ```golang
@@ -635,7 +636,7 @@ for rows.Next() {
     }
 }
 ```
-complete code for mapping refcursor to sql.Rows is found in [example/refcursor_to_rows](https://github.com/sijms/go-ora/blob/master/examples/refcursor_to_rows/main.go)
+complete code for mapping refcursor to sql.Rows is found in [example/refcursor_to_rows](https://github.com/cmmoran/go-ora/blob/master/examples/refcursor_to_rows/main.go)
 
 * ### Connect to multiple database
   * note that `sql.Open(...)` will use default driver so it will be suitable for one database projects.
@@ -706,7 +707,7 @@ db, err := sql.Open("oracle", "")
   
 * ### Multiple ResultSets
   * the driver support multiple resultsets start from v2.9.0
-  * example code can be reviewed [here](https://github.com/sijms/go-ora/blob/master/examples/multi_resultsets/main.go)
+  * example code can be reviewed [here](https://github.com/cmmoran/go-ora/blob/master/examples/multi_resultsets/main.go)
 
 [//]: # (### Go and Oracle type mapping + special types)
 
@@ -757,7 +758,7 @@ db, err := sql.Open("oracle", "")
 data size increased from 32KB to 1GB
 * fix issue in bulk insert when pass data types
 * add `lob fetch=stream` which is equal to `lob fetch=post`
-* testing file [prefetch large blob](https://github.com/sijms/go-ora/blob/v2.8.8/v2/TestIssues/prefetch_large_blob_test.go)
+* testing file [prefetch large blob](https://github.com/cmmoran/go-ora/blob/v2.8.8/v2/TestIssues/prefetch_large_blob_test.go)
 
 ### version 2.8.7
 * add support for regular type array
@@ -844,8 +845,8 @@ rows, err := go_ora.WrapRefCursor(context.Background(), conn, cursor)
 ```golang
 import (
   "database/sql"
-  db_out "github.com/sijms/go-ora/dbms_output"
-  _ "github.com/sijms/go-ora/v2"
+  db_out "github.com/cmmoran/go-ora/dbms_output"
+  _ "github.com/cmmoran/go-ora/v2"
   "os"
 )
 

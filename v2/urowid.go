@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/sijms/go-ora/v2/network"
+	"github.com/cmmoran/go-ora/v2/network"
 )
 
 type urowid struct {

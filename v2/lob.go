@@ -6,7 +6,7 @@ import (
 	"errors"
 	"go/types"
 
-	"github.com/sijms/go-ora/v2/converters"
+	"github.com/cmmoran/go-ora/v2/converters"
 )
 
 type Clob struct {

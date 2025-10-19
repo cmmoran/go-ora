@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	go_ora "github.com/sijms/go-ora/v2/lazy_init"
+	go_ora "github.com/cmmoran/go-ora/v2/lazy_init"
 )
 
 type RefusePacket struct {

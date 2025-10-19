@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/sijms/go-ora/network/security"
+	"github.com/cmmoran/go-ora/network/security"
 )
 
 type dataIntegrityService struct {

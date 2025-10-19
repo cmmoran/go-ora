@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sijms/go-ora/v2/converters"
+	"github.com/cmmoran/go-ora/v2/converters"
 )
 
 // ======== get primitive data from original data types ========//

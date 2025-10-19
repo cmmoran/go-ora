@@ -3,12 +3,12 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	go_ora "github.com/sijms/go-ora/v2"
+	"github.com/cmmoran/go-ora/v2"
 	"os"
 	"strings"
 	"time"
 
-	_ "github.com/sijms/go-ora/v2"
+	_ "github.com/cmmoran/go-ora/v2"
 )
 
 func _print(prefix string, val interface{}) {

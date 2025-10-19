@@ -3,7 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	go_ora "github.com/sijms/go-ora/v2"
+	"github.com/cmmoran/go-ora/v2"
 	"os"
 	"strings"
 	"time"

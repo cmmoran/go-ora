@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sijms/go-ora/trace"
+	"github.com/cmmoran/go-ora/trace"
 
-	"github.com/sijms/go-ora/converters"
+	"github.com/cmmoran/go-ora/converters"
 )
 
 type Data interface {

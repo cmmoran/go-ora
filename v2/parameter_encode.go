@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/sijms/go-ora/v2/converters"
+	"github.com/cmmoran/go-ora/v2/converters"
 )
 
 func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, data driver.Value) error {

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/sijms/go-ora/v2/converters"
+	"github.com/cmmoran/go-ora/v2/converters"
 	"math"
 	"reflect"
 	"strconv"

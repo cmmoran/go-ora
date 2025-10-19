@@ -6,7 +6,7 @@ import (
 	"os"
 	"strconv"
 
-	go_ora "github.com/sijms/go-ora/v2"
+	"github.com/cmmoran/go-ora/v2"
 )
 
 func usage() {

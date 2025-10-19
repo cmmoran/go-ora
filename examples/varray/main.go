@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	_ "github.com/sijms/go-ora/v2"
-	go_ora "github.com/sijms/go-ora/v2"
+	"github.com/cmmoran/go-ora/v2"
+	_ "github.com/cmmoran/go-ora/v2"
 )
 
 func execCmd(db *sql.DB, stmts ...string) error {

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"sync/atomic"
 
-	go_ora "github.com/sijms/go-ora/v2"
+	"github.com/cmmoran/go-ora/v2"
 )
 
 var ErrQueueNotMultiConsumer = errors.New("queue is not multi-consumer")

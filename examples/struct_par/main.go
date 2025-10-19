@@ -3,13 +3,13 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	go_ora "github.com/sijms/go-ora/v2"
+	"github.com/cmmoran/go-ora/v2"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	_ "github.com/sijms/go-ora/v2"
+	_ "github.com/cmmoran/go-ora/v2"
 )
 
 func createTable(conn *sql.DB) error {
