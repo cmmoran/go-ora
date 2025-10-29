@@ -3,7 +3,6 @@ package converters
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math"
 	"math/bits"
@@ -14,8 +13,49 @@ import (
 
 const (
 	maxConvertibleInt    = (1 << 63) - 1
-	maxConvertibleNegInt = (1 << 63)
+	maxConvertibleNegInt = 1 << 63
 )
+
+func ToDateLiteral(date time.Time) string {
+	return date.Format("2006-01-02 15:04:05")
+}
+
+func ToTimestampLiteral(date time.Time, precision ...int) string {
+	prec := 6
+	if len(precision) > 0 {
+		prec = precision[0]
+		if prec < 0 || prec > 9 {
+			prec = 6
+		}
+	}
+
+	return date.Format("2006-01-02 15:04:05." + strings.Repeat("9", prec) + "Z")
+}
+
+func ToTimestampWithTimeZoneLiteral(date time.Time, precision ...int) string {
+	prec := 6
+	if len(precision) > 0 {
+		prec = precision[0]
+		if prec < 0 || prec > 9 {
+			prec = 6
+		}
+	}
+
+	return date.Format("2006-01-02 15:04:05." + strings.Repeat("9", prec) + "-07:00")
+}
+
+func ToTimestampWithLocalTimeZoneLiteral(date time.Time, precision ...int) string {
+	temp := date.In(time.Local)
+	prec := 6
+	if len(precision) > 0 {
+		prec = precision[0]
+		if prec < 0 || prec > 9 {
+			prec = 6
+		}
+	}
+
+	return temp.Format("2006-01-02 15:04:05." + strings.Repeat("9", prec) + "Z")
+}
 
 var oracleZones = map[int]string{
 	42:   "Africa/Abidjan",
@@ -1154,6 +1194,7 @@ func fromHex(r byte) (byte, bool) {
 
 // EncodeDate convert time.Time into oracle representation
 func EncodeDate(ti time.Time) []byte {
+	ti = ti.Truncate(time.Second)
 	ret := make([]byte, 7)
 	ret[0] = uint8(ti.Year()/100 + 100)
 	ret[1] = uint8(ti.Year()%100 + 100)
@@ -1165,7 +1206,7 @@ func EncodeDate(ti time.Time) []byte {
 	return ret
 }
 
-func EncodeTimeStamp(ti time.Time, withTZ, sendAsLocalTime bool) []byte {
+func EncodeTimeStamp(ti time.Time, withTZ, sendAsLocalTime bool, precision uint8) []byte {
 	value := ti
 	if !sendAsLocalTime {
 		value = ti.UTC()
@@ -1178,9 +1219,19 @@ func EncodeTimeStamp(ti time.Time, withTZ, sendAsLocalTime bool) []byte {
 	ret[4] = uint8(value.Hour() + 1)
 	ret[5] = uint8(value.Minute() + 1)
 	ret[6] = uint8(value.Second() + 1)
-	binary.BigEndian.PutUint32(ret[7:11], uint32(value.Nanosecond()))
+	ns := value.Nanosecond()
+	if precision < 9 {
+		// 0 precision means seconds only
+		if precision == 0 {
+			ns = 0
+		} else {
+			scale := int(math.Pow10(9 - int(precision)))
+			ns = (ns / scale) * scale
+		}
+	}
+	binary.BigEndian.PutUint32(ret[7:11], uint32(ns))
 	if withTZ {
-		zoneLoc := ti.Location()
+		zoneLoc := value.Location()
 		zoneID := 0
 		for key, val := range oracleZones {
 			if strings.EqualFold(zoneLoc.String(), val) {
@@ -1188,103 +1239,109 @@ func EncodeTimeStamp(ti time.Time, withTZ, sendAsLocalTime bool) []byte {
 				break
 			}
 		}
-		// if (((int) numArray[11] & 128) != 0)
-		// {
-		// numArray[12] |= (byte) 1;
-		// if (dst)
-		// numArray[12] |= (byte) 2;
-		// }
-		// else
-		// numArray[11] |= (byte) 64;
 		if zoneID > 0 {
 			zone1 := uint8((zoneID&0x1FC0)>>6) | 0x80
 			zone2 := uint8((zoneID & 0x3F) << 2)
 			ret = append(ret, zone1, zone2)
 
 		} else {
-			_, offset := ti.Zone()
+			_, offset := value.Zone()
 			zone1 := uint8(offset/3600) + 20
 			zone2 := uint8((offset/60)%60) + 60
 			ret = append(ret, zone1, zone2)
 		}
 		if sendAsLocalTime {
-			if ret[11]&0x80 != 0 {
+			// ret[11] and ret[12] exist only if we appended zone bytes
+			if len(ret) >= 13 && (ret[11]&0x80) != 0 {
 				ret[12] |= 1
-				if time.Time(value).IsDST() {
+				if value.IsDST() {
 					ret[12] |= 2
 				}
-			} else {
+			} else if len(ret) >= 12 {
 				ret[11] |= 0x40
 			}
 		}
 
 	}
+
 	return ret
 }
 
-// DecodeDate convert oracle time representation into time.Time
 func DecodeDate(data []byte) (time.Time, error) {
-	if len(data) < 7 {
-		return time.Now(), errors.New("abnormal data representation for date")
+	switch len(data) {
+	case 7:
+		return decodeOracleDate(data)
+	case 11:
+		return decodeOracleTimestamp(data, false, false)
+	case 13:
+		return decodeOracleTimestamp(data, true, false)
+	default:
+		return time.Time{}, fmt.Errorf("unsupported Oracle datetime length %d", len(data))
 	}
-	year := (int(data[0]) - 100) * 100
-	year += int(data[1]) - 100
-	nanoSec := 0
-	tzHour := 0
-	tzMin := 0
-	if len(data) > 10 {
-		nanoSec = int(binary.BigEndian.Uint32(data[7:11]))
-	}
-	if len(data) > 11 {
-		tzHour = int(data[11]&0x3F) - 20
-	}
-	if len(data) > 12 {
-		tzMin = int(data[12]) - 60
-	}
-	if tzHour == 0 && tzMin == 0 {
-		return time.Date(year, time.Month(data[2]), int(data[3]),
-			int(data[4]-1), int(data[5]-1), int(data[6]-1), nanoSec, time.UTC), nil
-	}
-	var zone *time.Location
-	var timeInZone bool
-	// var err error
-	// fmt.Println(data)
-	if data[11]&0x80 != 0 {
-		regionCode := (int(data[11]) & 0x7F) << 6
-		regionCode += (int(data[12]) & 0xFC) >> 2
-		timeInZone = data[12]&0x1 == 1
-		name, found := oracleZones[regionCode]
-		if found {
-			zone, _ = time.LoadLocation(name)
-			//if err == nil {
-			//	return time.Now(), errors.New("Error decode timezone:" + err.Error())
-			//}
-		}
+}
 
-		//loc, err := time.Parse("-0700", fmt.Sprintf("%+03d%02d", tzHour, tzMin))
-		//if err != nil {
-		//	return time.Date(year, time.Month(data[2]), int(data[3]),
-		//		int(data[4]-1)+tzHour, int(data[5]-1)+tzMin, int(data[6]-1), nanoSec, time.UTC), nil
-		//} else {
-		//	return time.Date(year, time.Month(data[2]), int(data[3]),
-		//		int(data[4]-1)+tzHour, int(data[5]-1)+tzMin, int(data[6]-1), nanoSec, loc.Location()), nil
-		//}
+func decodeOracleDate(b []byte) (time.Time, error) {
+	year := int(b[0]-100)*100 + int(b[1]-100)
+	month := time.Month(b[2])
+	day := int(b[3])
+	hour := int(b[4] - 1)
+	minute := int(b[5] - 1)
+	sec := int(b[6] - 1)
+	return time.Date(year, month, day, hour, minute, sec, 0, time.Local), nil
+}
+
+func decodeOracleTimestamp(b []byte, withTZ, isLocal bool) (time.Time, error) {
+	if len(b) < 11 {
+		return time.Time{}, fmt.Errorf("invalid TIMESTAMP buffer length %d", len(b))
+	}
+	year := int(b[0]-100)*100 + int(b[1]-100)
+	month := time.Month(b[2])
+	day := int(b[3])
+	hour := int(b[4] - 1)
+	minute := int(b[5] - 1)
+	sec := int(b[6] - 1)
+	nsec := int(binary.BigEndian.Uint32(b[7:11]))
+
+	loc := time.UTC
+	if withTZ {
+		loc = decodeOracleZone(b)
+		return time.Date(year, month, day, hour, minute, sec, nsec, loc), nil
+	} else if isLocal {
+		loc = time.Local
+	}
+	return time.Date(year, month, day, hour, minute, sec, nsec, loc), nil
+}
+
+func decodeOracleZone(b []byte) *time.Location {
+	if len(b) < 13 {
+		return time.UTC
+	}
+	b11, b12 := b[11], b[12]
+	if (b11&0x80) != 0 || (int(b11)-20) > 14 || (int(b11)-20) < -14 {
+		zoneID := ((int(b11) & 0x7F) << 6) | ((int(b12) & 0xFC) >> 2)
+		if name, ok := oracleZones[zoneID]; ok {
+			if loc, err := time.LoadLocation(name); err == nil {
+				return loc
+			}
+		}
 	} else {
-		timeInZone = data[11]&0x40 == 0x40
+		hOff := int(b11) - 20
+		mOff := int(b12) - 60
+		if hOff == 0 && mOff == 0 {
+			return time.UTC
+		}
+		return time.FixedZone(fmt.Sprintf("TZ%+03d:%02d", hOff, mOff), hOff*3600+mOff*60)
 	}
-	if zone == nil {
-		zone = time.FixedZone(fmt.Sprintf("%+03d:%02d", tzHour, tzMin), tzHour*60*60+tzMin*60)
-		// timeInZone = true
+	return time.UTC
+}
+
+func DecodeOracleRegion(zoneID int) string {
+	if zoneID > 0 {
+		if name, ok := oracleZones[zoneID]; ok {
+			return name
+		}
 	}
-	if timeInZone {
-		return time.Date(year, time.Month(data[2]), int(data[3]),
-			int(data[4]-1), int(data[5]-1), int(data[6]-1), nanoSec, zone), nil
-	}
-	ret := time.Date(year, time.Month(data[2]), int(data[3]),
-		int(data[4]-1), int(data[5]-1), int(data[6]-1), nanoSec, time.UTC)
-	return ret.In(zone), nil
-	// return time.Date(year, time.Month(data[2]), int(data[3]),
-	//	int(data[4]-1)+tzHour, int(data[5]-1)+tzMin, int(data[6]-1), nanoSec, time.UTC), nil
+	return "UTC"
 }
 
 // addDigitToMantissa return the mantissa with the added digit if the carry is not

@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -69,3 +70,32 @@ func (nilTracer) Close() error                      { return nil }
 func (nilTracer) Print(vs ...interface{})           {}
 func (nilTracer) Printf(f string, s ...interface{}) {}
 func (nilTracer) LogPacket(s string, p []byte)      {}
+
+type consoleTracer struct{}
+
+func (c *consoleTracer) Close() error {
+	return nil
+}
+
+func (c *consoleTracer) Print(vs ...interface{}) {
+	fmt.Println(vs...)
+}
+
+func (c *consoleTracer) Printf(f string, s ...interface{}) {
+	if !strings.HasSuffix(f, "\n") {
+		f += "\n"
+	}
+	fmt.Printf(f, s...)
+}
+
+func (c *consoleTracer) LogPacket(s string, p []byte) {
+	fmt.Printf("%s\n", hex.Dump(p))
+}
+
+func (c *consoleTracer) IsOn() bool {
+	return true
+}
+
+func NewConsoleTracer() Tracer {
+	return &consoleTracer{}
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cmmoran/go-ora/v2/converters"
 	"github.com/cmmoran/go-ora/v2/network"
 )
 
@@ -82,11 +83,11 @@ func buildTypeNego(nego *TCPNego, session *network.Session) *DataTypeNego {
 		Server:      nego,
 		TypeAndRep:  make([]int16, bufferGrow),
 		CompileTimeCaps: []byte{
-			6, 1, 0, 0, 106, 1, 1, 11,
-			1, 1, 1, 1, 1, 1, 0, 41,
-			144, 3, 7, 3, 0, 1, 0, 235,
-			1, 0, 5, 1, 0, 0, 0, 24,
-			0, 0, 7, 32, 2, 58, 0, 0,
+			6, 1, 0, 0, 0x6A, 1, 1, 0xB,
+			1, 1, 1, 1, 1, 1, 0, 0x29,
+			0x90, 3, 7, 3, 0, 1, 0, 0xEB,
+			1, 0, 5, 1, 0, 0, 0, 0x18,
+			0, 0, 7, 0x2B, 2, 0x3A, 0, 0,
 			5, 0, 0, 0, 8,
 		},
 		// CompileTimeCaps: []byte{0x6, 0x1, 0x1, 0x1, 0x6f, 0x1, 0x1, 0x10,
@@ -104,11 +105,12 @@ func buildTypeNego(nego *TCPNego, session *network.Session) *DataTypeNego {
 	if len(result.Server.ServerCompileTimeCaps) <= 27 || result.Server.ServerCompileTimeCaps[27] == 0 {
 		result.CompileTimeCaps[27] = 0
 	}
-	xmlTypeClientSideDecoding := false
+	//xmlTypeClientSideDecoding := false
 	if len(result.Server.ServerCompileTimeCaps) > 7 {
-		if result.Server.ServerCompileTimeCaps[7] >= 8 && xmlTypeClientSideDecoding {
-			result.CompileTimeCaps[36] = 4
-		} else if result.Server.ServerCompileTimeCaps[7] < 7 {
+		//if result.Server.ServerCompileTimeCaps[7] >= 8 && xmlTypeClientSideDecoding {
+		//	result.CompileTimeCaps[36] = 4
+		//} else
+		if result.Server.ServerCompileTimeCaps[7] < 7 {
 			result.CompileTimeCaps[36] = 0
 		}
 	}
@@ -502,11 +504,27 @@ func (nego *DataTypeNego) read(session *network.Session) (zone *time.Location, e
 			err = errors.New("incorrect format for DBTimeZone")
 			return
 		}
-		tzHours := int(tz_bytes[4]) - 60
-		tzMin := int(tz_bytes[5]) - 60
-		tzSec := int(tz_bytes[6]) - 60
-		zone = time.FixedZone(fmt.Sprintf("%+03d:%02d", tzHours, tzMin),
-			tzHours*60*60+tzMin*60+tzSec)
+		if tz_bytes[0] == 0x80 {
+			//zone1 := uint8((zoneID&0x1FC0)>>6) | 0x80
+			//zone2 := uint8((zoneID & 0x3F) << 2)
+			zone1 := tz_bytes[2]
+			zone2 := tz_bytes[3]
+			zoneID := decodeZoneID(zone1, zone2)
+			zone, _ = time.LoadLocation(converters.DecodeOracleRegion(zoneID))
+		} else {
+			tzHours := int(tz_bytes[4]) - 60
+			if tzHours < -14 || tzHours > 14 {
+				tzHours = 0
+			}
+			tzMin := int(tz_bytes[5]) - 60
+			tzSec := int(tz_bytes[6]) - 60
+			if tzHours == 0 && tzMin == 0 && tzSec == 0 {
+				zone = time.UTC
+			} else {
+				zone = time.FixedZone(fmt.Sprintf("%+03d:%02d", tzHours, tzMin),
+					tzHours*60*60+tzMin*60+tzSec)
+			}
+		}
 		if nego.CompileTimeCaps[37]&2 == 2 {
 			nego.serverTZVersion, _ = session.GetInt(4, false, true)
 		}
@@ -536,6 +554,17 @@ func (nego *DataTypeNego) read(session *network.Session) (zone *time.Location, e
 	// fmt.Println("client timezone version: ", nego.clientTZVersion)
 	// fmt.Println("server timezone: ", nego.dbTimeZone)
 	return
+}
+
+func decodeZoneID(zone1, zone2 uint8) int {
+	// Remove the top bit added by `| 0x80`
+	zone1 &= 0x7F
+
+	// zone1 contributed the upper bits (shifted down by 6)
+	// zone2 contributed the lower bits (shifted up by 2)
+	// Invert the operations:
+
+	return int((uint16(zone1) << 6) | uint16(zone2>>2))
 }
 
 func (nego *DataTypeNego) write(session *network.Session) error {

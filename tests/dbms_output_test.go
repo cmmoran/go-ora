@@ -3,7 +3,7 @@ package tests
 import (
 	"testing"
 
-	"github.com/cmmoran/go-ora/dbms"
+	"github.com/cmmoran/go-ora/v2/dbms"
 )
 
 func TestDBMS_OUTPUT(t *testing.T) {

@@ -4,8 +4,9 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
-	"github.com/cmmoran/go-ora/v2/converters"
 	"time"
+
+	"github.com/cmmoran/go-ora/v2/converters"
 )
 
 type TimeStamp time.Time
@@ -41,7 +42,7 @@ func (val TimeStamp) GetCharsetForm() int {
 	return 0
 }
 func (val TimeStamp) Encode() ([]byte, error) {
-	return converters.EncodeTimeStamp(time.Time(val), false, true), nil
+	return converters.EncodeTimeStamp(time.Time(val), false, true, 9), nil
 }
 func (val *TimeStamp) Decode(data []byte) error {
 	temp, err := converters.DecodeDate(data)

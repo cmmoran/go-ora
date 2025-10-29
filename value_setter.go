@@ -3,12 +3,13 @@ package go_ora
 import (
 	"database/sql"
 	"fmt"
-	"github.com/cmmoran/go-ora/v2/converters"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/cmmoran/go-ora/v2/converters"
 )
 
 var truthy = []string{"true", "1"}
@@ -362,15 +363,15 @@ func setFieldValue(fieldValue reflect.Value, cust *customType, input interface{}
 		fieldValue.Set(reflect.ValueOf(input))
 		return nil
 	}
-	//if fieldValue.CanAddr() {
-	//	if scan, ok := fieldValue.Addr().Interface().(sql.Scanner); ok {
-	//		return scan.Scan(input)
-	//	}
-	//} else {
-	//	if scan, ok := fieldValue.Interface().(sql.Scanner); ok {
-	//		return scan.Scan(input)
-	//	}
-	//}
+
+	// Special case: We must check if the field implements scanner for enum types and other primitive type aliases
+	if temp, ok := fieldValue.Interface().(sql.Scanner); ok && temp != nil && !reflect.ValueOf(temp).IsNil() {
+		return temp.Scan(input)
+	} else if fieldValue.CanAddr() {
+		if temp, ok = fieldValue.Addr().Interface().(sql.Scanner); ok && temp != nil && !reflect.ValueOf(temp).IsNil() {
+			return temp.Scan(input)
+		}
+	}
 
 	switch val := input.(type) {
 	case int64, float64:

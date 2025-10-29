@@ -2,6 +2,7 @@ package go_ora
 
 import (
 	"bytes"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -9,6 +10,11 @@ import (
 	"time"
 
 	"github.com/cmmoran/go-ora/v2/converters"
+)
+
+var (
+	valuerType  = reflect.TypeOf((*driver.Valuer)(nil)).Elem()
+	scannerType = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 )
 
 func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, data driver.Value) error {
@@ -24,8 +30,45 @@ func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, dat
 	for goType.Kind() == reflect.Ptr {
 		goType = goType.Elem()
 	}
+
 	// 2- check for common types
 	if tNumber(goType) || tNullNumber(goType) {
+		if goType.Implements(valuerType) || reflect.PointerTo(goType).Implements(valuerType) {
+			// Create a zero value of this type to call Value()
+			v := reflect.New(goType).Interface()
+			if goType.Implements(scannerType) || reflect.PointerTo(goType).Implements(scannerType) {
+				err := v.(sql.Scanner).Scan(data)
+				_ = err
+			}
+			valuer, _ := v.(driver.Valuer)
+			if valuer != nil {
+				if val, err := valuer.Value(); err == nil && val != nil {
+					switch val.(type) {
+					case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+						par.DataType = NUMBER
+						par.MaxLen = converters.MAX_LEN_NUMBER
+					case bool:
+						par.DataType = NUMBER
+						par.MaxLen = converters.MAX_LEN_NUMBER
+					case string:
+						par.DataType = NCHAR
+						par.CharsetForm = 1
+						par.ContFlag = 16
+						par.CharsetID = conn.getDefaultCharsetID()
+						par.iPrimValue = v
+					case []byte:
+						par.DataType = RAW
+						par.MaxLen = len(val.([]byte))
+					case time.Time:
+						par.DataType = DATE
+					default:
+						// Fallback: treat as string representation
+						par.DataType = NCHAR
+					}
+					return nil
+				}
+			}
+		}
 		par.DataType = NUMBER
 		par.MaxLen = converters.MAX_LEN_NUMBER
 		return nil
@@ -131,177 +174,6 @@ func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, dat
 	default:
 		return fmt.Errorf("unsupported go type: %v", goType.Name())
 	}
-	//temp := defaultType{}
-	//err := temp.SetDataType(conn, par)
-	//if err != nil {
-	//	return err
-	//}
-
-	//if goType == tyObject {
-	//	val, err := getValue(value)
-	//	if err != nil {
-	//		return err
-	//	}
-	//	if obj, ok := val.(Object); ok {
-	//		par.DataType = XMLType
-	//		par.Value = obj.Value
-	//		// set custom type
-	//		for name, cusTyp := range conn.cusTyp {
-	//			if strings.EqualFold(name, obj.Name) {
-	//				par.cusType = new(customType)
-	//				*par.cusType = cusTyp
-	//				par.ToID = cusTyp.toid
-	//				if cusTyp.isArray {
-	//					par.MaxNoOfArrayElements = 1
-	//				} else {
-	//					par.Version = 1
-	//				}
-	//				break
-	//			}
-	//		}
-	//		if par.cusType == nil {
-	//			return fmt.Errorf("type %s is not created or not registered", obj.Name)
-	//		}
-	//		return nil
-	//	}
-	//}
-	//if goType != tyBytes && (goType.Kind() == reflect.Array || goType.Kind() == reflect.Slice) {
-	//val, err := getValue(value)
-	//if err != nil {
-	//	return err
-	//}
-	//var inVal driver.Value = nil
-	//if val != nil {
-	//	rValue := reflect.ValueOf(val)
-	//	size := rValue.Len()
-	//	if size > 0 && rValue.Index(0).CanInterface() {
-	//		inVal = rValue.Index(0).Interface()
-	//	}
-	//}
-	//par.Flag = 0x43
-	//err = par.setDataType(goType.Elem(), inVal, conn)
-	//if err != nil {
-	//	return err
-	//}
-	//if par.DataType == XMLType {
-	//	// par.cusType is for item I should get that of array
-	//	found := false
-	//	for _, cust := range conn.cusTyp {
-	//		if cust.isArray && len(cust.attribs) > 0 {
-	//			if par.cusType.name == cust.attribs[0].cusType.name {
-	//				found = true
-	//				// par.TypeName = name
-	//				par.ToID = cust.toid
-	//				*par.cusType = cust
-	//				par.Flag = 0x3
-	//				break
-	//			}
-	//		}
-	//	}
-	//	if !found {
-	//		return fmt.Errorf("can't get the collection of type %s", par.cusType.name)
-	//	}
-	//}
-	//par.MaxNoOfArrayElements = 1
-	//return nil
-	//}
-	//if tNumber(goType) || tNullNumber(goType) {
-	//	par.DataType = NUMBER
-	//	par.MaxLen = converters.MAX_LEN_NUMBER
-	//	return nil
-	//}
-
-	//switch goType {
-	//case tyNumber:
-	//	par.DataType = NUMBER
-	//	par.MaxLen = converters.MAX_LEN_NUMBER
-	//case tyPLBool:
-	//	par.DataType = Boolean
-	//	par.MaxLen = converters.MAX_LEN_BOOL
-	//case tyString, tyNullString:
-	//	par.DataType = NCHAR
-	//	par.CharsetForm = 1
-	//	par.ContFlag = 16
-	//	par.CharsetID = conn.getDefaultCharsetID()
-	//case tyNVarChar, tyNullNVarChar:
-	//	par.DataType = NCHAR
-	//	par.CharsetForm = 2
-	//	par.ContFlag = 16
-	//	par.CharsetID = conn.tcpNego.ServernCharset
-	//case tyTime, tyNullTime:
-	//	if par.Flag&0x40 > 0 {
-	//		par.DataType = DATE
-	//		par.MaxLen = converters.MAX_LEN_DATE
-	//	} else {
-	//		par.DataType = TimeStampTZ_DTY
-	//		par.MaxLen = converters.MAX_LEN_TIMESTAMP
-	//	}
-	//case tyTimeStamp, tyNullTimeStamp:
-	//	// if par.Flag&0x43 > 0 {
-	//	par.DataType = TIMESTAMP
-	//	par.MaxLen = converters.MAX_LEN_DATE
-	//} else {
-	//	par.DataType = TimeStampTZ_DTY
-	//	par.MaxLen = converters.MAX_LEN_TIMESTAMP
-	//}
-	//case tyTimeStampTZ, tyNullTimeStampTZ:
-	//	par.DataType = TimeStampTZ_DTY
-	//	par.MaxLen = converters.MAX_LEN_TIMESTAMP
-	// case tyTime, tyNullTime:
-	//	if par.Direction == Input {
-	//		par.DataType = TIMESTAMP
-	//		par.MaxLen = converters.MAX_LEN_TIMESTAMP
-	//	} else {
-	//		par.DataType = DATE
-	//		par.MaxLen = converters.MAX_LEN_DATE
-	//	}
-	// case tyTimeStamp, tyNullTimeStamp:
-	//	if par.Direction == Input {
-	//		par.DataType = TIMESTAMP
-	//		par.MaxLen = converters.MAX_LEN_TIMESTAMP
-	//	} else {
-	//		par.DataType = TIMESTAMP
-	//		par.MaxLen = converters.MAX_LEN_DATE
-	//	}
-	// case tyTimeStampTZ, tyNullTimeStampTZ:
-	//	par.DataType = TimeStampTZ_DTY
-	//	par.MaxLen = converters.MAX_LEN_TIMESTAMP
-	//case tyBytes:
-	//	par.DataType = RAW
-	//case tyClob:
-	//	par.DataType = OCIClobLocator
-	//	par.CharsetForm = 1
-	//	par.CharsetID = conn.getDefaultCharsetID()
-	//case tyNClob:
-	//	par.DataType = OCIClobLocator
-	//	par.CharsetForm = 2
-	//	par.CharsetID = conn.tcpNego.ServernCharset
-	//case tyBlob:
-	//	par.DataType = OCIBlobLocator
-	//case tyVector:
-	//	par.DataType = VECTOR
-	//case tyBFile:
-	//	par.DataType = OCIFileLocator
-	//case tyRefCursor:
-	//	par.DataType = REFCURSOR
-	//default:
-	//	rOriginal := reflect.ValueOf(value)
-	//	if value != nil && !(rOriginal.Kind() == reflect.Ptr && rOriginal.IsNil()) {
-	//		proVal := reflect.Indirect(rOriginal)
-	//		if valuer, ok := proVal.Interface().(driver.Valuer); ok {
-	//			val, err := valuer.Value()
-	//			if err != nil {
-	//				return err
-	//			}
-	//			if val == nil {
-	//				par.DataType = NCHAR
-	//				return nil
-	//			}
-	//			if val != value {
-	//				return par.setDataType(reflect.TypeOf(val), val, conn)
-	//			}
-	//		}
-	//	}
 
 	return nil
 }
@@ -507,9 +379,14 @@ func (par *ParameterInfo) encodePrimValue(conn *Connection) error {
 		case DATE:
 			par.BValue = converters.EncodeDate(value)
 		case TIMESTAMP:
-			par.BValue = converters.EncodeTimeStamp(value, false, true)
+			par.BValue = converters.EncodeTimeStamp(value, false, true, 9)
 		case TimeStampTZ_DTY:
-			par.BValue = converters.EncodeTimeStamp(value, true, conn.dataNego.serverTZVersion > 0 && conn.dataNego.clientTZVersion != conn.dataNego.serverTZVersion)
+			par.BValue = converters.EncodeTimeStamp(value, true, conn.dataNego.serverTZVersion > 0 && conn.dataNego.clientTZVersion != conn.dataNego.serverTZVersion, 9)
+		case TimeStampLTZ_DTY:
+			// TIMESTAMP WITH LOCAL TIME ZONE
+			// Oracle stores in DBTZ, shown in session TZ
+			// send UTC; DB normalizes to its TZ
+			par.BValue = converters.EncodeTimeStamp(value.UTC(), false, true, 9)
 		}
 	case *Lob:
 		par.BValue = value.sourceLocator

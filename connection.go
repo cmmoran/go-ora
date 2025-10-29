@@ -417,12 +417,17 @@ func (conn *Connection) OpenWithContext(ctx context.Context) error {
 		}
 	} else {
 		if len(conn.connOption.TraceFilePath) > 0 {
-			tf, err := os.Create(conn.connOption.TraceFilePath)
-			if err != nil {
-				//noinspection GoErrorStringFormat
-				return fmt.Errorf("Can't open trace file: %w", err)
+			if conn.connOption.TraceFilePath == "-" {
+				conn.tracer = trace.NewConsoleTracer()
+				return nil
+			} else {
+				tf, err := os.Create(conn.connOption.TraceFilePath)
+				if err != nil {
+					//noinspection GoErrorStringFormat
+					return fmt.Errorf("Can't open trace file: %w", err)
+				}
+				conn.tracer = trace.NewTraceWriter(tf)
 			}
-			conn.tracer = trace.NewTraceWriter(tf)
 		} else {
 			conn.tracer = trace.NilTracer()
 		}
@@ -549,11 +554,15 @@ func (conn *Connection) getDBServerTimeZone() {
 	}
 
 	var current time.Time
-	err := conn.QueryRowContext(context.Background(), "SELECT SYSTIMESTAMP FROM DUAL", nil).Scan(&current)
+	err := conn.QueryRowContext(context.Background(), "SELECT CAST(SYSTIMESTAMP AS TIMESTAMP WITH TIME ZONE) FROM DUAL", nil).Scan(&current)
 	if err != nil {
 		conn.dbServerTimeZone = time.UTC
 	}
-	conn.dbServerTimeZone = current.Location()
+	if current.Location() == time.UTC {
+		conn.dbServerTimeZone = time.UTC
+	} else {
+		conn.dbServerTimeZone = current.Location()
+	}
 }
 
 func (conn *Connection) getDBTimeZone() error {

@@ -45,7 +45,13 @@ func dropMainTable(db *sql.DB) error {
 }
 
 func getDB() (*sql.DB, error) {
-	url := go_ora.BuildUrl(server, port, service, username, password, urlOptions)
+	var (
+		url string
+		ok  bool
+	)
+	if url, ok = os.LookupEnv("GOORA_TESTDB"); !ok {
+		url = go_ora.BuildUrl(server, port, service, username, password, urlOptions)
+	}
 	return sql.Open("oracle", url)
 }
 
@@ -57,9 +63,9 @@ func init() {
 	} else {
 		port = int(tempInt)
 	}
-	ssl_value := os.Getenv("SSL")
+	sslValue := os.Getenv("SSL")
 	wallet := os.Getenv("WALLET")
-	if ssl_value == "TRUE" {
+	if sslValue == "TRUE" {
 		urlOptions["SSL"] = "true"
 		urlOptions["SSL VERIFY"] = "false"
 		urlOptions["wallet"] = wallet
