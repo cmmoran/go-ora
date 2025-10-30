@@ -20,11 +20,15 @@ func ToDateLiteral(date time.Time) string {
 	return date.Format("2006-01-02 15:04:05")
 }
 
-func ToDate(date time.Time) time.Time {
-	return ToTimestamp(date).Truncate(time.Second)
+func ToDate(date time.Time, loc ...*time.Location) time.Time {
+	return ToTimestamp(date, loc...).Truncate(time.Second)
 }
 
-func ToTimestamp(date time.Time) time.Time {
+func ToTimestamp(date time.Time, loc ...*time.Location) time.Time {
+	l := time.UTC
+	if len(loc) > 0 {
+		l = loc[0]
+	}
 	return time.Date(
 		date.Year(),
 		date.Month(),
@@ -33,7 +37,7 @@ func ToTimestamp(date time.Time) time.Time {
 		date.Minute(),
 		date.Second(),
 		date.Nanosecond(),
-		time.UTC,
+		l,
 	)
 }
 
@@ -243,7 +247,7 @@ func decodeOracleDate(b []byte) (time.Time, error) {
 	hour := int(b[4] - 1)
 	minute := int(b[5] - 1)
 	sec := int(b[6] - 1)
-	return time.Date(year, month, day, hour, minute, sec, 0, time.Local), nil
+	return time.Date(year, month, day, hour, minute, sec, 0, time.UTC), nil
 }
 
 func decodeOracleTimestamp(b []byte, withTZ, isLocal bool) (time.Time, error) {
