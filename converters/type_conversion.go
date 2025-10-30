@@ -16,20 +16,70 @@ const (
 	maxConvertibleNegInt = 1 << 63
 )
 
-func ToDateLiteral(date time.Time) string {
+type timeOptions struct {
+	precision int
+	truncate  time.Duration
+	location  *time.Location
+}
+
+type TimeOption func(t *timeOptions)
+
+func WithPrecision(precision int) TimeOption {
+	return func(t *timeOptions) {
+		if precision < 0 || precision > 9 {
+			precision = 6
+		}
+		t.precision = precision
+		t.truncate = durationForPrecision(precision)
+	}
+}
+
+func WithTruncate(truncate time.Duration) TimeOption {
+	return func(t *timeOptions) {
+		t.truncate = truncate
+	}
+}
+
+func WithLocation(loc *time.Location) TimeOption {
+	return func(t *timeOptions) {
+		t.location = loc
+	}
+}
+
+func parseOpts(opts ...TimeOption) *timeOptions {
+	o := &timeOptions{}
+	for _, optFn := range opts {
+		optFn(o)
+	}
+	if o.precision <= 0 || o.precision > 9 {
+		o.precision = 6
+	}
+
+	return o
+}
+
+func ToDateLiteral(date time.Time, opt ...TimeOption) string {
+	o := parseOpts(opt...)
+	if o.location != nil {
+		date = date.In(o.location)
+	}
+	if o.truncate > 0 {
+		date = date.Truncate(o.truncate)
+	}
+
 	return date.Format("2006-01-02 15:04:05")
 }
 
-func ToDate(date time.Time, loc ...*time.Location) time.Time {
-	return ToTimestamp(date, loc...).Truncate(time.Second)
+func ToDate(date time.Time, opt ...TimeOption) time.Time {
+	return ToTimestamp(date, opt...).Truncate(time.Second)
 }
 
-func ToTimestamp(date time.Time, loc ...*time.Location) time.Time {
-	l := time.UTC
-	if len(loc) > 0 {
-		l = loc[0]
+func ToTimestamp(date time.Time, opt ...TimeOption) time.Time {
+	o := parseOpts(opt...)
+	if o.location == nil {
+		o.location = time.UTC
 	}
-	return time.Date(
+	t := time.Date(
 		date.Year(),
 		date.Month(),
 		date.Day(),
@@ -37,45 +87,41 @@ func ToTimestamp(date time.Time, loc ...*time.Location) time.Time {
 		date.Minute(),
 		date.Second(),
 		date.Nanosecond(),
-		l,
+		o.location,
 	)
+	if o.truncate > 0 {
+		t = t.Truncate(o.truncate)
+	}
+
+	return t
 }
 
-func ToTimestampLiteral(date time.Time, precision ...int) string {
-	prec := 6
-	if len(precision) > 0 {
-		prec = precision[0]
-		if prec < 0 || prec > 9 {
-			prec = 6
-		}
-	}
-	date = date.Truncate(durationForPrecision(prec))
+func ToTimestampLiteral(date time.Time, opt ...TimeOption) string {
+	o := parseOpts(opt...)
 
-	return date.Format("2006-01-02 15:04:05." + strings.Repeat("9", prec) + "Z")
+	if o.truncate > 0 {
+		date = date.Truncate(o.truncate)
+	}
+
+	return date.Format("2006-01-02 15:04:05." + strings.Repeat("9", o.precision) + "Z")
 }
 
-func ToTimestampWithTimeZoneLiteral(date time.Time, precision ...int) string {
-	prec := 6
-	if len(precision) > 0 {
-		prec = precision[0]
-		if prec < 0 || prec > 9 {
-			prec = 6
-		}
-	}
-	date = date.Truncate(durationForPrecision(prec))
+func ToTimestampWithTimeZoneLiteral(date time.Time, opt ...TimeOption) string {
+	o := parseOpts(opt...)
 
-	return date.Format("2006-01-02 15:04:05." + strings.Repeat("9", prec) + "-07:00")
+	if o.truncate > 0 {
+		date = date.Truncate(o.truncate)
+	}
+
+	return date.Format("2006-01-02 15:04:05." + strings.Repeat("9", o.precision) + "-07:00")
 }
 
-func ToTimestampWithLocalTimeZone(date time.Time, precision ...int) time.Time {
-	prec := 6
-	if len(precision) > 0 {
-		prec = precision[0]
-		if prec < 0 || prec > 9 {
-			prec = 6
-		}
+func ToTimestampWithLocalTimeZone(date time.Time, opt ...TimeOption) time.Time {
+	o := parseOpts(opt...)
+
+	if o.truncate > 0 {
+		date = date.Truncate(o.truncate)
 	}
-	date = date.Truncate(durationForPrecision(prec))
 
 	return time.Date(
 		date.Year(),
@@ -85,7 +131,7 @@ func ToTimestampWithLocalTimeZone(date time.Time, precision ...int) time.Time {
 		date.Minute(),
 		date.Second(),
 		date.Nanosecond(),
-		time.UTC,
+		o.location,
 	)
 }
 
@@ -96,17 +142,18 @@ func ToTimestampWithLocalTimeZone(date time.Time, precision ...int) time.Time {
 // performs the conversion to database time zone on the result. the precision parameter is optional and defaults to
 // the oracle default precision of 6. Please note that if precision is set, the date will be truncated to that precision
 // before the string is created.
-func ToTimestampWithLocalTimeZoneLiteral(date time.Time, precision ...int) string {
-	prec := 6
-	if len(precision) > 0 {
-		prec = precision[0]
-		if prec < 0 || prec > 9 {
-			prec = 6
-		}
-	}
-	date = date.Truncate(durationForPrecision(prec))
+func ToTimestampWithLocalTimeZoneLiteral(date time.Time, opt ...TimeOption) string {
+	o := parseOpts(opt...)
 
-	return date.Format("2006-01-02 15:04:05." + strings.Repeat("9", prec) + "Z")
+	if o.truncate > 0 {
+		date = date.Truncate(o.truncate)
+	}
+
+	if o.location != nil {
+		date = date.In(o.location)
+	}
+
+	return date.Format("2006-01-02 15:04:05." + strings.Repeat("9", o.precision) + "Z")
 }
 
 func durationForPrecision(p int) time.Duration {
