@@ -87,7 +87,7 @@ func buildTypeNego(nego *TCPNego, session *network.Session) *DataTypeNego {
 			1, 1, 1, 1, 1, 1, 0, 0x29,
 			0x90, 3, 7, 3, 0, 1, 0, 0xEB,
 			1, 0, 5, 1, 0, 0, 0, 0x18,
-			0, 0, 7, 0x2B, 2, 0x3A, 0, 0,
+			0, 0, 7, 0x20, 2, 0x3A, 0, 0,
 			5, 0, 0, 0, 8,
 		},
 		// CompileTimeCaps: []byte{0x6, 0x1, 0x1, 0x1, 0x6f, 0x1, 0x1, 0x10,
@@ -495,29 +495,32 @@ func (nego *DataTypeNego) read(session *network.Session) (zone *time.Location, e
 		return
 	}
 	if nego.RuntimeCap[1] == 1 {
-		var tz_bytes []byte
-		tz_bytes, err = session.GetBytes(11)
+		var tzBytes []byte
+		tzBytes, err = session.GetBytes(11)
 		if err != nil {
 			return
 		}
-		if len(tz_bytes) < 11 {
+		if len(tzBytes) < 11 {
 			err = errors.New("incorrect format for DBTimeZone")
 			return
 		}
-		if tz_bytes[0] == 0x80 {
-			//zone1 := uint8((zoneID&0x1FC0)>>6) | 0x80
-			//zone2 := uint8((zoneID & 0x3F) << 2)
-			zone1 := tz_bytes[2]
-			zone2 := tz_bytes[3]
-			zoneID := decodeZoneID(zone1, zone2)
-			zone, _ = time.LoadLocation(converters.DecodeOracleRegion(zoneID))
+		if tzBytes[0] == 0x80 {
+			zone1 := tzBytes[2]
+			zone2 := tzBytes[3]
+			if zoneName, ok := converters.RawRegionIDToZoneName(zone1, zone2); ok {
+				if zone, err = time.LoadLocation(zoneName); err != nil {
+					zone = time.UTC
+				}
+			} else {
+				zone = time.UTC
+			}
 		} else {
-			tzHours := int(tz_bytes[4]) - 60
+			tzHours := int(tzBytes[4]) - 60
 			if tzHours < -14 || tzHours > 14 {
 				tzHours = 0
 			}
-			tzMin := int(tz_bytes[5]) - 60
-			tzSec := int(tz_bytes[6]) - 60
+			tzMin := int(tzBytes[5]) - 60
+			tzSec := int(tzBytes[6]) - 60
 			if tzHours == 0 && tzMin == 0 && tzSec == 0 {
 				zone = time.UTC
 			} else {

@@ -419,7 +419,6 @@ func (conn *Connection) OpenWithContext(ctx context.Context) error {
 		if len(conn.connOption.TraceFilePath) > 0 {
 			if conn.connOption.TraceFilePath == "-" {
 				conn.tracer = trace.NewConsoleTracer()
-				return nil
 			} else {
 				tf, err := os.Create(conn.connOption.TraceFilePath)
 				if err != nil {
@@ -554,7 +553,7 @@ func (conn *Connection) getDBServerTimeZone() {
 	}
 
 	var current time.Time
-	err := conn.QueryRowContext(context.Background(), "SELECT CAST(SYSTIMESTAMP AS TIMESTAMP WITH TIME ZONE) FROM DUAL", nil).Scan(&current)
+	err := conn.QueryRowContext(context.Background(), "SELECT SYSTIMESTAMP FROM DUAL", nil).Scan(&current)
 	if err != nil {
 		conn.dbServerTimeZone = time.UTC
 	}

@@ -19,7 +19,7 @@ var service = os.Getenv("SERVICE")
 var username = os.Getenv("USER")
 var password = os.Getenv("PASSWORD")
 var urlOptions = map[string]string{
-	"TRACE FILE": "trace.log",
+	"TRACE FILE": "-",
 	"lob fetch":  "pre",
 }
 
