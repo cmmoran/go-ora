@@ -13,10 +13,11 @@ import (
 )
 
 func TestTime(t *testing.T) {
-	loc, _ := time.LoadLocation("UTC")
+	sessionLoc, _ := time.LoadLocation("UTC")
+	dbLoc := sessionLoc
 	var createTable = func(db *sql.DB) error {
 		var err error
-		err = errors.Join(err, execCmd(db, fmt.Sprintf(`ALTER SESSION SET TIME_ZONE = '%s'`, loc.String())))
+		err = errors.Join(err, execCmd(db, fmt.Sprintf(`ALTER SESSION SET TIME_ZONE = '%s'`, sessionLoc.String())))
 		err = errors.Join(err, execCmd(db, `ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD HH24:MI:SS'`))
 		err = errors.Join(err, execCmd(db, `ALTER SESSION SET NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SS.FF9"Z"'`))
 		err = errors.Join(err, execCmd(db, `ALTER SESSION SET NLS_TIMESTAMP_TZ_FORMAT = 'YYYY-MM-DD HH24:MI:SS.FF9TZH:TZM'`))
@@ -31,10 +32,10 @@ CREATE TABLE TTB_TIME(
 	}
 
 	var dropTable = func(db *sql.DB) error { return execCmd(db, `DROP TABLE TTB_TIME PURGE`) }
-	var date = time.Now().In(loc).Truncate(time.Microsecond)
+	var date = time.Now().Truncate(time.Microsecond)
 	var insert = func(db *sql.DB) error {
 		_, err := db.Exec("INSERT INTO TTB_TIME(ID, DATE1, DATE2, DATE3, DATE4) VALUES(:1, :2, :3, :4, :5)",
-			1, date, date, date.In(loc), date)
+			1, date, date, date.In(sessionLoc), date)
 		return err
 	}
 	var query = func(db *sql.DB) error {
@@ -44,77 +45,77 @@ CREATE TABLE TTB_TIME(
 			// we can use string literals to compare with the underlying value
 			where1 = ToDateLiteral(date)
 			where2 = ToTimestampLiteral(date)
-			where3 = ToTimestampWithTimeZoneLiteral(date)
-			where4 = ToTimestampWithLocalTimeZoneLiteral(date, WithLocation(loc))
+			where3 = ToTimestampWithTimeZoneLiteral(date, WithLocation(sessionLoc))
+			where4 = ToTimestampWithLocalTimeZoneLiteral(date, WithLocation(dbLoc))
 			// we can also use time.Time types if we strip the parts that won't match the underlying value to be compared
-			wdate1 = ToDate(date, WithLocation(loc))
+			wdate1 = ToDate(date)
 			wdate2 = ToTimestamp(date)
-			wdate3 = date.In(loc)
-			wdate4 = ToTimestampWithLocalTimeZone(date, WithLocation(loc))
+			wdate3 = date.In(sessionLoc)
+			wdate4 = ToTimestampWithLocalTimeZone(date)
 		)
 
 		err := db.QueryRow("SELECT ID, DATE1, DATE2, DATE3, DATE4 FROM TTB_TIME").Scan(&id, &date1, &date2, &date3, &date4)
 		require.NoErrorf(t, err, "error not expected")
-		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", ToDate(date, WithLocation(loc)), date1)
-		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", ToTimestamp(date), date2)
-		require.EqualValuesf(t, wdate3, date3, "timestamp with time zone value expected %v and got %v", date.In(loc), date3)
-		require.EqualValuesf(t, wdate4, date4, "timestamp with local time zone expected %v and got %v", date, date4)
+		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", wdate1, date1.In(sessionLoc))
+		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", wdate2, date2)
+		require.EqualValuesf(t, wdate3, date3.In(sessionLoc), "timestamp with time zone value expected %v and got %v", wdate3, date3.In(sessionLoc))
+		require.EqualValuesf(t, wdate4.In(date4.Location()), date4, "timestamp with local time zone expected %v and got %v", wdate4.In(date4.Location()), date4)
 
 		err = db.QueryRow(`SELECT ID, DATE1, DATE2, DATE3, DATE4 FROM TTB_TIME WHERE DATE1 = :1`, wdate1).Scan(&id, &date1, &date2, &date3, &date4)
 		require.NoErrorf(t, err, "error not expected")
-		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", ToDate(date, WithLocation(loc)), date1)
-		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", ToTimestamp(date), date2)
-		require.EqualValuesf(t, wdate3, date3, "timestamp with time zone value expected %v and got %v", date.In(loc), date3)
-		require.EqualValuesf(t, wdate4, date4, "timestamp with local time zone expected %v and got %v", date, date4)
+		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", wdate1, date1)
+		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", wdate2, date2)
+		require.EqualValuesf(t, wdate3, date3.In(sessionLoc), "timestamp with time zone value expected %v and got %v", wdate3, date3.In(sessionLoc))
+		require.EqualValuesf(t, wdate4.In(date4.Location()), date4, "timestamp with local time zone expected %v and got %v", wdate4.In(date4.Location()), date4)
 
 		err = db.QueryRow(`SELECT ID, DATE1, DATE2, DATE3, DATE4 FROM TTB_TIME WHERE DATE1 = :1`, where1).Scan(&id, &date1, &date2, &date3, &date4)
 		require.NoErrorf(t, err, "error not expected")
-		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", ToDate(date, WithLocation(loc)), date1)
-		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", ToTimestamp(date), date2)
-		require.EqualValuesf(t, wdate3, date3, "timestamp with time zone value expected %v and got %v", date.In(loc), date3)
-		require.EqualValuesf(t, wdate4, date4, "timestamp with local time zone expected %v and got %v", date, date4)
+		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", wdate1, date1)
+		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", wdate2, date2)
+		require.EqualValuesf(t, wdate3, date3.In(sessionLoc), "timestamp with time zone value expected %v and got %v", wdate3, date3.In(sessionLoc))
+		require.EqualValuesf(t, wdate4.In(date4.Location()), date4, "timestamp with local time zone expected %v and got %v", wdate4.In(date4.Location()), date4)
 
 		err = db.QueryRow(`SELECT ID, DATE1, DATE2, DATE3, DATE4 FROM TTB_TIME WHERE DATE2 = :1`, wdate2).Scan(&id, &date1, &date2, &date3, &date4)
 		require.NoErrorf(t, err, "error not expected")
-		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", ToDate(date, WithLocation(loc)), date1)
-		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", ToTimestamp(date), date2)
-		require.EqualValuesf(t, wdate3, date3, "timestamp with time zone value expected %v and got %v", date.In(loc), date3)
-		require.EqualValuesf(t, wdate4, date4, "timestamp with local time zone expected %v and got %v", date, date4)
+		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", wdate1, date1)
+		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", wdate2, date2)
+		require.EqualValuesf(t, wdate3, date3.In(sessionLoc), "timestamp with time zone value expected %v and got %v", wdate3, date3.In(sessionLoc))
+		require.EqualValuesf(t, wdate4.In(date4.Location()), date4, "timestamp with local time zone expected %v and got %v", wdate4.In(date4.Location()), date4)
 
 		err = db.QueryRow(`SELECT ID, DATE1, DATE2, DATE3, DATE4 FROM TTB_TIME WHERE DATE2 = :1`, where2).Scan(&id, &date1, &date2, &date3, &date4)
 		require.NoErrorf(t, err, "error not expected")
-		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", ToDate(date, WithLocation(loc)), date1)
-		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", ToTimestamp(date), date2)
-		require.EqualValuesf(t, wdate3, date3, "timestamp with time zone value expected %v and got %v", date.In(loc), date3)
-		require.EqualValuesf(t, wdate4, date4, "timestamp with local time zone expected %v and got %v", date, date4)
+		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", wdate1, date1)
+		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", wdate2, date2)
+		require.EqualValuesf(t, wdate3, date3.In(sessionLoc), "timestamp with time zone value expected %v and got %v", wdate3, date3.In(sessionLoc))
+		require.EqualValuesf(t, wdate4.In(date4.Location()), date4, "timestamp with local time zone expected %v and got %v", wdate4.In(date4.Location()), date4)
 
 		err = db.QueryRow(`SELECT ID, DATE1, DATE2, DATE3, DATE4 FROM TTB_TIME WHERE DATE3 = :1`, wdate3).Scan(&id, &date1, &date2, &date3, &date4)
 		require.NoErrorf(t, err, "error not expected")
-		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", ToDate(date, WithLocation(loc)), date1)
-		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", ToTimestamp(date), date2)
-		require.EqualValuesf(t, wdate3, date3, "timestamp with time zone value expected %v and got %v", date.In(loc), date3)
-		require.EqualValuesf(t, wdate4, date4, "timestamp with local time zone expected %v and got %v", date, date4)
+		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", wdate1, date1)
+		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", wdate2, date2)
+		require.EqualValuesf(t, wdate3, date3.In(sessionLoc), "timestamp with time zone value expected %v and got %v", wdate3, date3.In(sessionLoc))
+		require.EqualValuesf(t, wdate4.In(date4.Location()), date4, "timestamp with local time zone expected %v and got %v", wdate4.In(date4.Location()), date4)
 
 		err = db.QueryRow(`SELECT ID, DATE1, DATE2, DATE3, DATE4 FROM TTB_TIME WHERE DATE3 = :1`, where3).Scan(&id, &date1, &date2, &date3, &date4)
 		require.NoErrorf(t, err, "error not expected")
-		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", ToDate(date, WithLocation(loc)), date1)
-		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", ToTimestamp(date), date2)
-		require.EqualValuesf(t, wdate3, date3, "timestamp with time zone value expected %v and got %v", date.In(loc), date3)
-		require.EqualValuesf(t, wdate4, date4, "timestamp with local time zone expected %v and got %v", date, date4)
+		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", wdate1, date1)
+		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", wdate2, date2)
+		require.EqualValuesf(t, wdate3, date3.In(sessionLoc), "timestamp with time zone value expected %v and got %v", wdate3, date3.In(sessionLoc))
+		require.EqualValuesf(t, wdate4.In(date4.Location()), date4, "timestamp with local time zone expected %v and got %v", wdate4.In(date4.Location()), date4)
 
 		err = db.QueryRow(`SELECT ID, DATE1, DATE2, DATE3, DATE4 FROM TTB_TIME WHERE DATE4 = :1`, wdate4).Scan(&id, &date1, &date2, &date3, &date4)
 		require.NoErrorf(t, err, "error not expected")
-		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", ToDate(date, WithLocation(loc)), date1)
-		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", ToTimestamp(date), date2)
-		require.EqualValuesf(t, wdate3, date3, "timestamp with time zone value expected %v and got %v", date.In(loc), date3)
-		require.EqualValuesf(t, wdate4, date4, "timestamp with local time zone expected %v and got %v", date, date4)
+		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", wdate1, date1)
+		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", wdate2, date2)
+		require.EqualValuesf(t, wdate3, date3.In(sessionLoc), "timestamp with time zone value expected %v and got %v", wdate3, date3.In(sessionLoc))
+		require.EqualValuesf(t, wdate4.In(date4.Location()), date4, "timestamp with local time zone expected %v and got %v", wdate4.In(date4.Location()), date4)
 
 		err = db.QueryRow(`SELECT ID, DATE1, DATE2, DATE3, DATE4 FROM TTB_TIME WHERE DATE4 = :1`, where4).Scan(&id, &date1, &date2, &date3, &date4)
 		require.NoErrorf(t, err, "error not expected")
-		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", ToDate(date, WithLocation(loc)), date1)
-		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", ToTimestamp(date), date2)
-		require.EqualValuesf(t, wdate3, date3, "timestamp with time zone value expected %v and got %v", date.In(loc), date3)
-		require.EqualValuesf(t, wdate4, date4, "timestamp with local time zone expected %v and got %v", date, date4)
+		require.EqualValuesf(t, wdate1, date1, "date value expected %v and got %v", wdate1, date1)
+		require.EqualValuesf(t, wdate2, date2, "timestamp value expected %v and got %v", wdate2, date2)
+		require.EqualValuesf(t, wdate3, date3.In(sessionLoc), "timestamp with time zone value expected %v and got %v", wdate3, date3.In(sessionLoc))
+		require.EqualValuesf(t, wdate4.In(date4.Location()), date4, "timestamp with local time zone expected %v and got %v", wdate4.In(date4.Location()), date4)
 
 		return nil
 	}

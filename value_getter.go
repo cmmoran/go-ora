@@ -15,33 +15,47 @@ import (
 // ======== get primitive data from original data types ========//
 
 // get value to bypass pointer and sql.Null* values
-func getValue(origVal driver.Value) (driver.Value, error) {
-	if origVal == nil {
+func getValue(orig driver.Value) (driver.Value, error) {
+	if orig == nil {
 		return nil, nil
 	}
-	rOriginal := reflect.ValueOf(origVal)
-	if rOriginal.Kind() == reflect.Ptr && rOriginal.IsNil() {
-		return nil, nil
+
+	v := reflect.ValueOf(orig)
+	// Unwrap pointers
+	for v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil, nil
+		}
+		v = v.Elem()
 	}
-	proVal := reflect.Indirect(rOriginal)
-	if proVal.Kind() == reflect.Ptr && proVal.IsNil() {
-		proVal = reflect.New(proVal.Type().Elem())
-	}
-	if valuer, ok := proVal.Interface().(driver.Valuer); ok {
-		return valuer.Value()
-	}
-	if proVal.Kind() == reflect.String {
-		if b, bytesOverride := converters.EncodeUUIDLike(proVal.Interface().(string)); bytesOverride {
+
+	val := v.Interface()
+
+	// Handle sql.NullString explicitly
+	switch nv := val.(type) {
+	case sql.NullString:
+		if !nv.Valid {
+			return nil, nil
+		}
+		if b, ok := converters.EncodeUUIDLike(nv.String); ok {
 			return b, nil
 		}
-	} else if proVal.Type() == reflect.TypeOf((*sql.NullString)(nil)).Elem() {
-		if proVal.Interface().(sql.NullString).Valid {
-			if b, bytesOverride := converters.EncodeUUIDLike(proVal.Interface().(sql.NullString).String); bytesOverride {
-				return b, nil
-			}
+		return nv.String, nil
+	}
+
+	// If implements driver.Valuer, delegate
+	if valuer, ok := val.(driver.Valuer); ok {
+		return valuer.Value()
+	}
+
+	// Handle plain string UUID-like
+	if s, ok := val.(string); ok {
+		if b, ok := converters.EncodeUUIDLike(s); ok {
+			return b, nil
 		}
 	}
-	return proVal.Interface(), nil
+
+	return val, nil
 }
 
 // get string value from supported types

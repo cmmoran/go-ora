@@ -379,14 +379,14 @@ func (par *ParameterInfo) encodePrimValue(conn *Connection) error {
 		case DATE:
 			par.BValue = converters.EncodeDate(value)
 		case TIMESTAMP:
-			par.BValue = converters.EncodeTimeStamp(value, false, true, 9)
+			par.BValue = converters.EncodeTimeStamp(value, false, true)
 		case TimeStampTZ_DTY:
-			par.BValue = converters.EncodeTimeStamp(value, true, conn.dataNego.serverTZVersion > 0 && conn.dataNego.clientTZVersion != conn.dataNego.serverTZVersion, 9)
+			par.BValue = converters.EncodeTimeStamp(value, true, true)
 		case TimeStampLTZ_DTY:
 			// TIMESTAMP WITH LOCAL TIME ZONE
 			// Oracle stores in DBTZ, shown in session TZ
 			// send UTC; DB normalizes to its TZ
-			par.BValue = converters.EncodeTimeStamp(value.UTC(), false, true, 9)
+			par.BValue = converters.EncodeTimeStamp(value, false, true)
 		}
 	case *Lob:
 		par.BValue = value.sourceLocator

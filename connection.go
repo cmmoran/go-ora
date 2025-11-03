@@ -79,6 +79,7 @@ type NLSData struct {
 	NTimezoneFormat string
 	Territory       string
 	Charset         string
+	SessionTimezone *time.Location
 }
 type Connection struct {
 	State             ConnectionState
@@ -565,12 +566,19 @@ func (conn *Connection) getDBServerTimeZone() {
 }
 
 func (conn *Connection) getDBTimeZone() error {
-	var result string
+	var (
+		result string
+		loc    *time.Location
+	)
 	err := conn.QueryRowContext(context.Background(), "SELECT DBTIMEZONE FROM DUAL", nil).Scan(&result)
 	// var current time.Time
 	// err := conn.QueryRowContext(context.Background(), "SELECT SYSTIMESTAMP FROM DUAL", nil).Scan(&current)
 	if err != nil {
 		return err
+	}
+	if loc, err = time.LoadLocation(result); err == nil {
+		conn.dbTimeZone = loc
+		return nil
 	}
 	var tzHours, tzMin int
 	_, err = fmt.Sscanf(result, "%03d:%02d", &tzHours, &tzMin)
@@ -962,6 +970,32 @@ func (nls *NLSData) SaveNLSValue(key, value string, code int) {
 		nls.NCharConvExcep = value
 	case 63:
 		nls.NCharConvImp = value
+	case 163:
+		zoneData := []byte(value)
+		var (
+			zoneName   string
+			hOff, mOff int
+		)
+		if len(zoneData) > 0 && zoneData[2] > 120 {
+			zoneName, _ = converters.RawRegionIDToZoneName(zoneData[2], zoneData[3])
+			hOff = int(zoneData[4]) - 181
+			mOff = int(zoneData[5]) - 60
+		} else {
+			hOff = int(zoneData[4]) - 60
+			mOff = int(zoneData[5]) - 60
+		}
+		if len(zoneName) == 0 {
+			hPrefix := ""
+			if hOff > 0 {
+				hPrefix = "+"
+			}
+			mPrefix := ":"
+			if mOff <= 9 {
+				mPrefix = ":0"
+			}
+			zoneName = fmt.Sprintf("GMT%s%d%s%d", hPrefix, hOff, mPrefix, mOff)
+		}
+		nls.SessionTimezone, _ = time.LoadLocation(zoneName)
 	}
 }
 

@@ -564,7 +564,7 @@ func (par *ParameterInfo) decodePrimValue(conn *Connection, temporaryLobs *[][]b
 
 		if !isEqualLoc(conn.dbServerTimeZone, time.UTC) {
 			par.oPrimValue = time.Date(tempTime.Year(), tempTime.Month(), tempTime.Day(),
-				tempTime.Hour(), tempTime.Minute(), tempTime.Second(), tempTime.Nanosecond(), conn.dbServerTimeZone)
+				tempTime.Hour(), tempTime.Minute(), tempTime.Second(), tempTime.Nanosecond(), time.UTC)
 		} else {
 			par.oPrimValue = tempTime
 		}
@@ -574,6 +574,20 @@ func (par *ParameterInfo) decodePrimValue(conn *Connection, temporaryLobs *[][]b
 		if err != nil {
 			return err
 		}
+
+		if isEqualLoc(tempTime.Location(), time.Local) {
+			par.oPrimValue = tempTime.In(time.Local)
+		}
+
+		//if tempTime.Location() != nil && conn.NLSData.SessionTimezone != nil && isEqualLoc(tempTime.Location(), conn.NLSData.SessionTimezone) {
+		//	if isEqualLoc(conn.NLSData.SessionTimezone, time.Local) {
+		//		tempTime = tempTime.In(time.Local)
+		//	} else {
+		//		tempTime = tempTime.In(conn.NLSData.SessionTimezone)
+		//	}
+		//} else if tempTime.Location() != nil && isEqualLoc(tempTime.Location(), time.Local) {
+		//	tempTime = tempTime.In(time.Local)
+		//}
 		par.oPrimValue = tempTime
 	case TimeStampeLTZ, TimeStampLTZ_DTY:
 		tempTime, err := converters.DecodeDate(par.BValue)
@@ -585,25 +599,6 @@ func (par *ParameterInfo) decodePrimValue(conn *Connection, temporaryLobs *[][]b
 			par.oPrimValue = time.Date(tempTime.Year(), tempTime.Month(), tempTime.Day(),
 				tempTime.Hour(), tempTime.Minute(), tempTime.Second(), tempTime.Nanosecond(), conn.dbTimeZone)
 		}
-	//case TimeStampDTY, TimeStampeLTZ, TimeStampLTZ_DTY, TIMESTAMPTZ, TimeStampTZ_DTY:
-	//	fallthrough
-	//case TIMESTAMP, DATE:
-	//	tempTime, err := converters.DecodeDate(par.BValue)
-	//	if err != nil {
-	//		return err
-	//	}
-	//	if (par.DataType == DATE || par.DataType == TIMESTAMP || par.DataType == TimeStampDTY) && conn.dbTimeLoc != time.UTC {
-	//
-	//	} else {
-	//
-	//	}
-	//case VECTOR:
-	//	temp, err := session.GetClr()
-	//	if err != nil {
-	//		return err
-	//	}
-	//	fmt.Println(temp)
-	//	return errors.New("vector is not supported")
 	case OCIClobLocator, OCIBlobLocator:
 		var locator []byte
 		if !udt {

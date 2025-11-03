@@ -2,7 +2,10 @@ module github.com/cmmoran/go-ora/v2
 
 go 1.24.0
 
-require github.com/jcmturner/gokrb5/v8 v8.4.4
+require (
+	github.com/jcmturner/gokrb5/v8 v8.4.4
+	golang.org/x/sys v0.37.0
+)
 
 require (
 	github.com/hashicorp/go-uuid v1.0.3 // indirect

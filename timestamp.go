@@ -42,7 +42,7 @@ func (val TimeStamp) GetCharsetForm() int {
 	return 0
 }
 func (val TimeStamp) Encode() ([]byte, error) {
-	return converters.EncodeTimeStamp(time.Time(val), false, true, 9), nil
+	return converters.EncodeTimeStamp(time.Time(val), false, true), nil
 }
 func (val *TimeStamp) Decode(data []byte) error {
 	temp, err := converters.DecodeDate(data)

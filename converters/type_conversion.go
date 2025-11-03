@@ -14,6 +14,11 @@ import (
 const (
 	maxConvertibleInt    = (1 << 63) - 1
 	maxConvertibleNegInt = 1 << 63
+	NlsTimeFormat        = "HH24:MI:SS.FF9"
+	NlsTimeTzFormat      = "HH24:MI:SS.FF9TZH:TZM"
+	NlsDateFormat        = "YYYY-MM-DD HH24:MI:SS"
+	NlsTimestampFormat   = `YYYY-MM-DD HH24:MI:SS.FF9"Z"`
+	NlsTimestampTzFormat = `YYYY-MM-DD HH24:MI:SS.FF9TZH:TZM`
 )
 
 type timeOptions struct {
@@ -58,26 +63,12 @@ func parseOpts(opts ...TimeOption) *timeOptions {
 	return o
 }
 
-func ToDateLiteral(date time.Time, opt ...TimeOption) string {
-	o := parseOpts(opt...)
-	if o.location != nil {
-		date = date.In(o.location)
-	}
-	if o.truncate > 0 {
-		date = date.Truncate(o.truncate)
-	}
-
-	return date.Format("2006-01-02 15:04:05")
-}
-
 func ToDate(date time.Time, opt ...TimeOption) time.Time {
-	return ToTimestamp(date, opt...).Truncate(time.Second)
-}
-
-func ToTimestamp(date time.Time, opt ...TimeOption) time.Time {
 	o := parseOpts(opt...)
 	if o.location == nil {
 		o.location = time.UTC
+	} else {
+		date = date.In(o.location)
 	}
 	t := time.Date(
 		date.Year(),
@@ -87,7 +78,40 @@ func ToTimestamp(date time.Time, opt ...TimeOption) time.Time {
 		date.Minute(),
 		date.Second(),
 		date.Nanosecond(),
-		o.location,
+		time.UTC,
+	)
+	if o.truncate == 0 {
+		o.truncate = time.Second
+	}
+	if o.truncate > 0 {
+		t = t.Truncate(o.truncate)
+	}
+
+	return t
+}
+
+func ToDateLiteral(date time.Time, opt ...TimeOption) string {
+	date = ToDate(date, opt...)
+
+	return date.Format("2006-01-02 15:04:05")
+}
+
+func ToTimestamp(date time.Time, opt ...TimeOption) time.Time {
+	o := parseOpts(opt...)
+	if o.location == nil {
+		o.location = time.UTC
+	} else {
+		date = date.In(o.location)
+	}
+	t := time.Date(
+		date.Year(),
+		date.Month(),
+		date.Day(),
+		date.Hour(),
+		date.Minute(),
+		date.Second(),
+		date.Nanosecond(),
+		time.UTC,
 	)
 	if o.truncate > 0 {
 		t = t.Truncate(o.truncate)
@@ -98,12 +122,17 @@ func ToTimestamp(date time.Time, opt ...TimeOption) time.Time {
 
 func ToTimestampLiteral(date time.Time, opt ...TimeOption) string {
 	o := parseOpts(opt...)
+	if o.location == nil {
+		o.location = time.UTC
+	} else {
+		date = date.In(o.location)
+	}
 
 	if o.truncate > 0 {
 		date = date.Truncate(o.truncate)
 	}
 
-	return date.Format("2006-01-02 15:04:05." + strings.Repeat("9", o.precision) + "Z")
+	return date.Format("2006-01-02 15:04:05.999999999Z")
 }
 
 func ToTimestampWithTimeZoneLiteral(date time.Time, opt ...TimeOption) string {
@@ -112,8 +141,11 @@ func ToTimestampWithTimeZoneLiteral(date time.Time, opt ...TimeOption) string {
 	if o.truncate > 0 {
 		date = date.Truncate(o.truncate)
 	}
+	if o.location != nil {
+		date = date.In(o.location)
+	}
 
-	return date.Format("2006-01-02 15:04:05." + strings.Repeat("9", o.precision) + "-07:00")
+	return date.Format("2006-01-02 15:04:05.999999999-07:00")
 }
 
 func ToTimestampWithLocalTimeZone(date time.Time, opt ...TimeOption) time.Time {
@@ -122,6 +154,11 @@ func ToTimestampWithLocalTimeZone(date time.Time, opt ...TimeOption) time.Time {
 	if o.truncate > 0 {
 		date = date.Truncate(o.truncate)
 	}
+
+	if o.location == nil {
+		o.location = time.UTC
+	}
+	date = date.In(o.location)
 
 	return time.Date(
 		date.Year(),
@@ -143,17 +180,9 @@ func ToTimestampWithLocalTimeZone(date time.Time, opt ...TimeOption) time.Time {
 // the oracle default precision of 6. Please note that if precision is set, the date will be truncated to that precision
 // before the string is created.
 func ToTimestampWithLocalTimeZoneLiteral(date time.Time, opt ...TimeOption) string {
-	o := parseOpts(opt...)
+	date = ToTimestampWithLocalTimeZone(date, opt...)
 
-	if o.truncate > 0 {
-		date = date.Truncate(o.truncate)
-	}
-
-	if o.location != nil {
-		date = date.In(o.location)
-	}
-
-	return date.Format("2006-01-02 15:04:05." + strings.Repeat("9", o.precision) + "Z")
+	return date.Format("2006-01-02 15:04:05.999999999Z")
 }
 
 func durationForPrecision(p int) time.Duration {
@@ -222,7 +251,7 @@ func EncodeDate(ti time.Time) []byte {
 	return ret
 }
 
-func EncodeTimeStamp(ti time.Time, withTZ, sendAsLocalTime bool, precision uint8) []byte {
+func EncodeTimeStamp(ti time.Time, withTZ, sendAsLocalTime bool) []byte {
 	value := ti
 	if !sendAsLocalTime {
 		value = ti.UTC()
@@ -236,18 +265,18 @@ func EncodeTimeStamp(ti time.Time, withTZ, sendAsLocalTime bool, precision uint8
 	ret[5] = uint8(value.Minute() + 1)
 	ret[6] = uint8(value.Second() + 1)
 	ns := value.Nanosecond()
-	if precision < 9 {
-		// 0 precision means seconds only
-		if precision == 0 {
-			ns = 0
-		} else {
-			scale := int(math.Pow10(9 - int(precision)))
-			ns = (ns / scale) * scale
-		}
-	}
+
 	binary.BigEndian.PutUint32(ret[7:11], uint32(ns))
 	if withTZ {
-		name, _ := value.Zone()
+		name := "UTC"
+		if tmpZone := value.Location(); tmpZone != nil {
+			name = tmpZone.String()
+		}
+		if name == "Local" {
+			if name = DetectCanonicalLocal(); name == "Local" {
+				name = "UTC"
+			}
+		}
 		parts, ok := ZoneNameToRegionIDParts(name)
 		if ok {
 			ret = append(ret, parts...)
