@@ -67,8 +67,6 @@ func ToDate(date time.Time, opt ...TimeOption) time.Time {
 	o := parseOpts(opt...)
 	if o.location == nil {
 		o.location = time.UTC
-	} else {
-		date = date.In(o.location)
 	}
 	t := time.Date(
 		date.Year(),
@@ -78,7 +76,7 @@ func ToDate(date time.Time, opt ...TimeOption) time.Time {
 		date.Minute(),
 		date.Second(),
 		date.Nanosecond(),
-		time.UTC,
+		o.location,
 	)
 	if o.truncate == 0 {
 		o.truncate = time.Second
@@ -100,8 +98,6 @@ func ToTimestamp(date time.Time, opt ...TimeOption) time.Time {
 	o := parseOpts(opt...)
 	if o.location == nil {
 		o.location = time.UTC
-	} else {
-		date = date.In(o.location)
 	}
 	t := time.Date(
 		date.Year(),
@@ -111,7 +107,7 @@ func ToTimestamp(date time.Time, opt ...TimeOption) time.Time {
 		date.Minute(),
 		date.Second(),
 		date.Nanosecond(),
-		time.UTC,
+		o.location,
 	)
 	if o.truncate > 0 {
 		t = t.Truncate(o.truncate)

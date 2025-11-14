@@ -769,6 +769,9 @@ func (conn *Connection) loadNLSData() error {
 			return err
 		}
 		conn.NLSData.SaveNLSValue(string(nlsKey), string(nlsVal), nlsCode)
+		if conn.NLSData.SessionTimezone == nil {
+			conn.NLSData.SessionTimezone = time.UTC
+		}
 	}
 	_, err = conn.session.GetInt(4, true, true)
 	return err
