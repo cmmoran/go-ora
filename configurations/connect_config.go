@@ -49,7 +49,7 @@ func (config *ConnectionConfig) ConnectionData() string {
 	}
 	host := config.GetActiveServer(false)
 	protocol := config.Protocol
-	if host.Protocol != "" {
+	if host != nil && host.Protocol != "" {
 		protocol = host.Protocol
 	}
 	FulCid := "(CID=(PROGRAM=" + config.ProgramPath + ")(HOST=" + config.HostName + ")(USER=" + config.OSUserName + "))"
@@ -138,6 +138,20 @@ func ParseConfig(dsn string) (*ConnectionConfig, error) {
 	config.ServiceName = strings.Trim(u.Path, "/")
 	for key, val := range q {
 		switch strings.ToUpper(key) {
+		case "CUSTOM DNS", "CUSTOM_DNS", "CUSTOM-DNS", "CUSTOMDNS":
+			dnsServers := make([]string, 0)
+			for _, srv := range val {
+				dnsPort := "53"
+				tsrv, tdnsPort, terr := net.SplitHostPort(srv)
+				if terr == nil {
+					srv = net.JoinHostPort(tsrv, tdnsPort)
+				} else {
+					srv = net.JoinHostPort(tsrv, dnsPort)
+				}
+			}
+			if len(dnsServers) > 0 {
+				config.SessionInfo.Dialer = NewDNSAwareDialer(time.Second*30, dnsServers...)
+			}
 		case "CID":
 			config.Cid = val[0]
 		case "CONNSTR":
@@ -256,7 +270,7 @@ func ParseConfig(dsn string) (*ConnectionConfig, error) {
 				return nil, errors.New("TIMEOUT value must be an integer")
 			}
 			config.SessionInfo.ConnectTimeout = time.Second * time.Duration(to)
-		case "TRACE FILE":
+		case "TRACE FILE", "TRACE_FILE", "TRACE-FILE", "TRACEFILE":
 			config.TraceFilePath = val[0]
 			// if len(val[0]) > 0 {
 			//	tf, err := os.Create(val[0])
