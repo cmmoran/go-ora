@@ -59,7 +59,7 @@ func (config *ConnectionConfig) ConnectionData() string {
 	var address string
 	if len(config.UnixAddress) > 0 {
 		address = "(ADDRESS=(PROTOCOL=IPC)(KEY=EXTPROC1))"
-	} else {
+	} else if host != nil {
 		address = "(ADDRESS=(PROTOCOL=" + protocol + ")(HOST=" + host.Addr + ")(PORT=" + strconv.Itoa(host.Port) + "))"
 	}
 
@@ -87,7 +87,7 @@ func ParseConfig(dsn string) (*ConnectionConfig, error) {
 	config := &ConnectionConfig{
 		PrefetchRows: 25,
 		SessionInfo: SessionInfo{
-			ConnectTimeout: time.Duration(60 * time.Second),
+			ConnectTimeout: 60 * time.Second,
 			Timeout:        0,
 			// TransportDataUnitSize: 0xFFFF,
 			// SessionDataUnitSize:   0xFFFF,
@@ -140,17 +140,25 @@ func ParseConfig(dsn string) (*ConnectionConfig, error) {
 		switch strings.ToUpper(key) {
 		case "CUSTOM DNS", "CUSTOM_DNS", "CUSTOM-DNS", "CUSTOMDNS":
 			dnsServers := make([]string, 0)
-			for _, srv := range val {
-				dnsPort := "53"
-				tsrv, tdnsPort, terr := net.SplitHostPort(srv)
-				if terr == nil {
-					srv = net.JoinHostPort(tsrv, tdnsPort)
-				} else {
-					srv = net.JoinHostPort(tsrv, dnsPort)
+			if len(val) == 1 {
+				if tval, terr := url.QueryUnescape(val[0]); terr == nil {
+					val[0] = tval
+				}
+				if strings.Contains(val[0], ",") {
+					val = strings.Split(val[0], ",")
 				}
 			}
+			for _, srv := range val {
+				if len(strings.TrimSpace(srv)) > 0 {
+					if tsrv, terr := url.QueryUnescape(srv); terr == nil {
+						srv = tsrv
+					}
+					dnsServers = append(dnsServers, srv)
+				}
+			}
+
 			if len(dnsServers) > 0 {
-				config.SessionInfo.Dialer = NewDNSAwareDialer(time.Second*30, dnsServers...)
+				config.SessionInfo.Dialer = NewDNSAwareDialer(3*time.Second, dnsServers...)
 			}
 		case "CID":
 			config.Cid = val[0]

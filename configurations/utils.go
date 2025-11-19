@@ -1,7 +1,11 @@
 package configurations
 
 import (
+	"errors"
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -281,4 +285,179 @@ func getCharsetID(charset string) (int, error) {
 		return 0, fmt.Errorf("charset %s is not supported by the driver", charset)
 	}
 	return id, nil
+}
+
+type DSN struct {
+	Scheme   string
+	User     string
+	Password string
+	Host     string
+	Port     string
+	Database string
+	Params   map[string]string
+	Raw      string
+}
+
+func (x *DSN) PortInt(def int) int {
+	if x.Port == "" {
+		return def
+	}
+	if p, err := strconv.Atoi(x.Port); err != nil {
+		return def
+	} else {
+		return p
+	}
+}
+
+func ParseDSN(input string) (*DSN, error) {
+	if input == "" {
+		return nil, errors.New("dsn: empty string")
+	}
+
+	d := &DSN{
+		Params: map[string]string{},
+		Raw:    input,
+	}
+
+	// ---------------------------------------------------------
+	// 1. Try URI-first parsing (works for PostgreSQL, MySQL, Oracle, etc.)
+	// ---------------------------------------------------------
+	if strings.Contains(input, "://") {
+		u, err := url.Parse(input)
+		if err != nil {
+			return nil, err
+		}
+
+		d.Scheme = u.Scheme
+
+		if u.User != nil {
+			d.User = u.User.Username()
+			d.Password, _ = u.User.Password()
+		}
+
+		// host:port
+		if host, port, err := net.SplitHostPort(u.Host); err == nil {
+			d.Host = host
+			d.Port = port
+		} else {
+			d.Host = u.Host
+		}
+
+		// /database
+		db := strings.TrimPrefix(u.Path, "/")
+		if db != "" {
+			d.Database = db
+		}
+
+		// params
+		for k, v := range u.Query() {
+			if len(v) > 0 {
+				d.Params[k] = v[0]
+			}
+		}
+
+		return d, nil
+	}
+
+	// ---------------------------------------------------------
+	// 2. Try key=value style (PostgreSQL keyword format)
+	//    e.g. host=localhost port=5432 user=foo password=bar dbname=mydb
+	// ---------------------------------------------------------
+	if strings.Contains(input, "=") && !strings.Contains(input, "@") {
+		parts := strings.Fields(input)
+		for _, p := range parts {
+			kv := strings.SplitN(p, "=", 2)
+			if len(kv) != 2 {
+				continue
+			}
+			key := strings.ToLower(kv[0])
+			val := kv[1]
+
+			switch key {
+			case "host":
+				d.Host = val
+			case "port":
+				d.Port = val
+			case "user", "username":
+				d.User = val
+			case "password", "pass", "pwd":
+				d.Password = val
+			case "dbname", "database":
+				d.Database = val
+			default:
+				d.Params[key] = val
+			}
+		}
+		return d, nil
+	}
+
+	// ---------------------------------------------------------
+	// 3. Try "user:pass@host:port/dbname?x=y"
+	// ---------------------------------------------------------
+	// Convert it to URI form: "proto://user:pass@host:port/db?x=y"
+	{
+		tmp := input
+
+		// Already has params?
+		q := ""
+		if idx := strings.Index(tmp, "?"); idx != -1 {
+			q = tmp[idx+1:]
+			tmp = tmp[:idx]
+		}
+
+		// Extract user:pass@
+		user := ""
+		pass := ""
+		hostportdb := tmp
+		if idx := strings.Index(tmp, "@"); idx != -1 {
+			creds := tmp[:idx]
+			hostportdb = tmp[idx+1:]
+
+			if cidx := strings.Index(creds, ":"); cidx != -1 {
+				user = creds[:cidx]
+				pass = creds[cidx+1:]
+			} else {
+				user = creds
+			}
+		}
+
+		// Extract host:port and db
+		host := ""
+		port := ""
+		db := ""
+
+		if idx := strings.Index(hostportdb, "/"); idx != -1 {
+			hostport := hostportdb[:idx]
+			db = hostportdb[idx+1:]
+			if h, p, err := net.SplitHostPort(hostport); err == nil {
+				host = h
+				port = p
+			} else {
+				host = hostport
+			}
+		} else {
+			// No /db
+			if h, p, err := net.SplitHostPort(hostportdb); err == nil {
+				host = h
+				port = p
+			} else {
+				host = hostportdb
+			}
+		}
+
+		d.User = user
+		d.Password = pass
+		d.Host = host
+		d.Port = port
+		d.Database = db
+
+		if q != "" {
+			m, _ := url.ParseQuery(q)
+			for k, v := range m {
+				d.Params[k] = v[0]
+			}
+		}
+
+		return d, nil
+	}
 }

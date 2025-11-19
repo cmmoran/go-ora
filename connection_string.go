@@ -94,7 +94,7 @@ func BuildJDBC(user, password, connStr string, options map[string]string) string
 
 // BuildUrl create databaseURL from server, port, service, user, password, urlOptions
 // this function help build a will formed databaseURL and accept any character as it
-// convert special charters to corresponding values in URL
+// convert special characters to corresponding values in URL
 func BuildUrl(server string, port int, service, user, password string, options map[string]string) string {
 	ret := fmt.Sprintf("oracle://%s:%s@%s/%s", url.PathEscape(user), url.PathEscape(password),
 		net.JoinHostPort(server, strconv.Itoa(port)), url.PathEscape(service))

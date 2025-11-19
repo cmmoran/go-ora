@@ -424,6 +424,9 @@ func RegisterTypeWithOwner(conn *sql.DB, owner, typeName, arrayTypeName string, 
 }
 
 func ParseConfig(dsn string) (*configurations.ConnectionConfig, error) {
+	if tdsn, err := configurations.ParseDSN(dsn); err == nil {
+		dsn = BuildUrl(tdsn.Host, tdsn.PortInt(1521), tdsn.Database, tdsn.User, tdsn.Password, tdsn.Params)
+	}
 	config, err := configurations.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
