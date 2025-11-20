@@ -551,11 +551,8 @@ func (par *ParameterInfo) decodePrimValue(conn *Connection, temporaryLobs *[][]b
 	case RAW, LongRaw:
 		par.oPrimValue = par.BValue
 	case NUMBER:
-		num := Number{data: par.BValue}
-		par.oPrimValue, err = num.String()
-		if err != nil {
-			return err
-		}
+		num := converters.DecodeNumber(par.BValue)
+		par.oPrimValue = num
 	case DATE, TIMESTAMP, TimeStampDTY:
 		tempTime, err := converters.DecodeDate(par.BValue)
 		if err != nil {
