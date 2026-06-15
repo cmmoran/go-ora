@@ -61,6 +61,32 @@ func TestGetValue(t *testing.T) {
 	}
 }
 
+func TestSetFieldValueUUIDLikePointerBytesAndNull(t *testing.T) {
+	var id *testRaw16
+	raw := []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
+
+	err := setFieldValue(reflect.ValueOf(&id).Elem(), nil, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id == nil {
+		t.Fatal("expected UUID-like pointer to be allocated")
+	}
+	var want [16]byte
+	copy(want[:], raw)
+	if got := [16]byte(*id); got != want {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+
+	err = setFieldValue(reflect.ValueOf(&id).Elem(), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != nil {
+		t.Fatalf("expected UUID-like pointer to reset to nil, got %v", id)
+	}
+}
+
 func TestGetInt(t *testing.T) {
 	checkGetInt := func(testedValue interface{}, expectedValue int64) error {
 		val, err := getInt(testedValue)

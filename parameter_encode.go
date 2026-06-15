@@ -79,6 +79,11 @@ func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, dat
 		par.iPrimValue = b
 		return nil
 	}
+	if tUUIDLikeType(goType) {
+		par.DataType = RAW
+		par.MaxLen = ty16Byte.Len()
+		return nil
+	}
 	switch goType {
 	case tyNVarChar, tyNullNVarChar:
 		par.DataType = NCHAR

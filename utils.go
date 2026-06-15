@@ -247,13 +247,23 @@ func tUUIDLike(data driver.Value) ([]byte, bool) {
 	if !rv.IsValid() {
 		return nil, false
 	}
-	if rv.Type().AssignableTo(ty16Byte) || rv.Kind() == reflect.String {
+	if rv.Type().ConvertibleTo(ty16Byte) || rv.Kind() == reflect.String {
 		if b, ok := asRaw16(rv); ok {
 			return b, true
 		}
 	}
 
 	return nil, false
+}
+
+func tUUIDLikeType(t reflect.Type) bool {
+	if t == nil {
+		return false
+	}
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	return t.ConvertibleTo(ty16Byte)
 }
 
 // asRaw16 returns a 16-byte slice if v is any T or *T whose underlying type is [16]byte,

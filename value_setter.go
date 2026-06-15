@@ -302,6 +302,15 @@ func setBytes(value reflect.Value, input []byte) error {
 				return err
 			}
 		}
+		if value.Kind() == reflect.Array && value.Len() == ty16Byte.Len() && value.Type().Elem().Kind() == reflect.Uint8 {
+			if len(input) != ty16Byte.Len() {
+				return fmt.Errorf("can not assign RAW(%d) to type: %v", len(input), value.Type().Name())
+			}
+			raw := reflect.New(value.Type()).Elem()
+			reflect.Copy(raw.Slice(0, raw.Len()), reflect.ValueOf(input))
+			value.Set(raw)
+			return nil
+		}
 		return fmt.Errorf("can not assign []byte to type: %v", value.Type().Name())
 	}
 	return nil

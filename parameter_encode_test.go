@@ -20,6 +20,8 @@ var (
 	}
 )
 
+type testRaw16 [16]byte
+
 func checkParInfo(par *ParameterInfo, expPar *ParameterInfo) error {
 	if par.CharsetForm != expPar.CharsetForm {
 		return fmt.Errorf("expected charset form %v and get %v", expPar.CharsetForm, par.CharsetForm)
@@ -50,6 +52,28 @@ func checkParInfo(par *ParameterInfo, expPar *ParameterInfo) error {
 		return fmt.Errorf("expected binary value %v and get %v", expPar.BValue, par.BValue)
 	}
 	return nil
+}
+
+func TestEncodeOutputUUIDLikePointerPointer(t *testing.T) {
+	var id *testRaw16
+	par := &ParameterInfo{
+		Direction: Output,
+		Value:     &id,
+	}
+
+	err := par.encodeValue(0, conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = checkParInfo(par, &ParameterInfo{
+		DataType: RAW,
+		Flag:     3,
+		MaxLen:   16,
+	})
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 //func testEncodeValue(t *testing.T, title string, par *ParameterInfo, value interface{}, expType TNSType, flag, contFlag, charsetID, charsetForm, maxLen, maxCharLen int) error {
