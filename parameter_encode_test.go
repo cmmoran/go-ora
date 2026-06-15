@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/cmmoran/go-ora/v2/converters"
 )
 
 var (
@@ -352,7 +354,7 @@ func TestEncodeValue(t *testing.T) {
 		return
 	}
 
-	timeVal := time.Date(2023, 5, 28, 23, 38, 11, 500, time.Local)
+	timeVal := time.Date(2023, 5, 28, 23, 38, 11, 500, time.UTC)
 	par.Value = timeVal
 	conn.dataNego = &DataTypeNego{
 		clientTZVersion: 1,
@@ -370,7 +372,7 @@ func TestEncodeValue(t *testing.T) {
 		ContFlag:   0,
 		MaxLen:     13,
 		iPrimValue: timeVal,
-		BValue:     []byte{120, 123, 5, 28, 24, 39, 12, 0, 0, 1, 244, 20, 60},
+		BValue:     converters.EncodeTimeStamp(timeVal, true, true),
 	})
 	if err != nil {
 		t.Error(err)
@@ -405,9 +407,9 @@ func TestEncodeValue(t *testing.T) {
 		DataType:   TIMESTAMP,
 		Flag:       3,
 		ContFlag:   0,
-		MaxLen:     11,
+		MaxLen:     converters.MAX_LEN_TIMESTAMP,
 		iPrimValue: timeVal,
-		BValue:     []byte{120, 123, 5, 28, 24, 39, 12, 0, 0, 1, 244},
+		BValue:     converters.EncodeTimeStamp(timeVal, false, true),
 	})
 	if err != nil {
 		t.Error(err)
@@ -424,7 +426,7 @@ func TestEncodeValue(t *testing.T) {
 	err = checkParInfo(par, &ParameterInfo{
 		DataType: TIMESTAMP,
 		Flag:     3,
-		MaxLen:   11,
+		MaxLen:   converters.MAX_LEN_TIMESTAMP,
 	})
 	if err != nil {
 		t.Error(err)
@@ -444,7 +446,7 @@ func TestEncodeValue(t *testing.T) {
 		ContFlag:   0,
 		MaxLen:     13,
 		iPrimValue: timeVal,
-		BValue:     []byte{120, 123, 5, 28, 24, 39, 12, 0, 0, 1, 244, 20, 60},
+		BValue:     converters.EncodeTimeStamp(timeVal, true, true),
 	})
 	if err != nil {
 		t.Error(err)

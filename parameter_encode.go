@@ -80,6 +80,20 @@ func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, dat
 		return nil
 	}
 	switch goType {
+	case tyNVarChar, tyNullNVarChar:
+		par.DataType = NCHAR
+		par.CharsetForm = 2
+		par.ContFlag = 16
+		par.CharsetID = conn.tcpNego.ServernCharset
+		return nil
+	case tyTimeStamp, tyNullTimeStamp:
+		par.DataType = TIMESTAMP
+		par.MaxLen = converters.MAX_LEN_TIMESTAMP
+		return nil
+	case tyTimeStampTZ, tyNullTimeStampTZ:
+		par.DataType = TimeStampTZ_DTY
+		par.MaxLen = converters.MAX_LEN_TIMESTAMP
+		return nil
 	case tyString, tyNullString:
 		par.DataType = NCHAR
 		par.CharsetForm = 1
