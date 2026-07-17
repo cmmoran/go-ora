@@ -29,17 +29,24 @@ func (value testUUIDValuer) Value() (driver.Value, error) {
 	return "a40b65f9-5d1d-415c-a2ac-fea0933c8d4e", nil
 }
 
+func newUUIDTestConnection() *Connection {
+	testConn := &Connection{tcpNego: &TCPNego{ServernCharset: 870, ServerCharset: 0x230}}
+	testConn.maxLen.varchar = 0x7FFF
+	testConn.maxLen.nvarchar = 0x7FFF
+	testConn.maxLen.raw = 0x7FFF
+	return testConn
+}
+
 func TestEncodeUUIDLikeValuerArrayElementsAsRawBytes(t *testing.T) {
 	values := []testUUIDValuer{
 		{0xa4, 0x0b, 0x65, 0xf9, 0x5d, 0x1d, 0x41, 0x5c, 0xa2, 0xac, 0xfe, 0xa0, 0x93, 0x3c, 0x8d, 0x4e},
 		{0x55, 0x0e, 0x84, 0x00, 0xe2, 0x9b, 0x41, 0xd4, 0xa7, 0x16, 0x44, 0x66, 0x55, 0x44, 0x00, 0x00},
 	}
-	testConn := *conn
-	testConn.maxLen.raw = 0x7FFF
+	testConn := newUUIDTestConnection()
 
 	for index, value := range values {
 		par := &ParameterInfo{Direction: Input, Value: value}
-		if err := par.encodeValue(0, &testConn); err != nil {
+		if err := par.encodeValue(0, testConn); err != nil {
 			t.Fatalf("encode element %d: %v", index, err)
 		}
 		if par.DataType != RAW {
@@ -64,10 +71,7 @@ func TestCheckNamedValuePreservesUUIDLikeValuer(t *testing.T) {
 
 func TestExplicitCharacterTypesOverrideUUIDInference(t *testing.T) {
 	const uuidText = "a40b65f9-5d1d-415c-a2ac-fea0933c8d4e"
-	testConn := *conn
-	testConn.maxLen.varchar = 0x7FFF
-	testConn.maxLen.nvarchar = 0x7FFF
-	testConn.maxLen.raw = 0x7FFF
+	testConn := newUUIDTestConnection()
 	tests := []struct {
 		name        string
 		value       driver.Value
@@ -79,7 +83,7 @@ func TestExplicitCharacterTypesOverrideUUIDInference(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			par := &ParameterInfo{Direction: Input, Value: test.value}
-			if err := par.encodeValue(0, &testConn); err != nil {
+			if err := par.encodeValue(0, testConn); err != nil {
 				t.Fatal(err)
 			}
 			if par.DataType != NCHAR || par.CharsetForm != test.charsetForm {
@@ -92,7 +96,7 @@ func TestExplicitCharacterTypesOverrideUUIDInference(t *testing.T) {
 	}
 
 	par := &ParameterInfo{Direction: Input, Value: uuidText}
-	if err := par.encodeValue(0, &testConn); err != nil {
+	if err := par.encodeValue(0, testConn); err != nil {
 		t.Fatal(err)
 	}
 	if par.DataType != RAW || len(par.BValue) != 16 {
