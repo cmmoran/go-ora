@@ -72,14 +72,18 @@ func refineSqlText(text string) string {
 			// bypass next character
 			continue
 		case '/':
-			if index+1 < length && text[index+1] == '*' {
-				index += 1
-				skip = true
+			if !inDoubleQuote && !inSingleQuote {
+				if index+1 < length && text[index+1] == '*' {
+					index += 1
+					skip = true
+				}
 			}
 		case '*':
-			if index+1 < length && text[index+1] == '/' {
-				index += 1
-				skip = false
+			if !inDoubleQuote && !inSingleQuote {
+				if index+1 < length && text[index+1] == '/' {
+					index += 1
+					skip = false
+				}
 			}
 		case '\'':
 			if !skip && !inDoubleQuote {
@@ -90,7 +94,7 @@ func refineSqlText(text string) string {
 				inDoubleQuote = !inDoubleQuote
 			}
 		case '-':
-			if !skip {
+			if !skip && !inDoubleQuote && !inSingleQuote {
 				if index+1 < length && text[index+1] == '-' {
 					index += 1
 					lineComment = true

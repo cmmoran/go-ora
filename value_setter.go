@@ -14,6 +14,19 @@ import (
 
 var truthy = []string{"true", "1"}
 
+func scannerIsAvailable(scanner sql.Scanner) bool {
+	if scanner == nil {
+		return false
+	}
+	value := reflect.ValueOf(scanner)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return !value.IsNil()
+	default:
+		return true
+	}
+}
+
 // set null value from supported types
 func setNull(value reflect.Value) error {
 	if value.Kind() == reflect.Ptr && value.IsNil() {
@@ -111,7 +124,7 @@ func setNumber(value reflect.Value, input *Number) error {
 		value.Set(reflect.ValueOf(NullNVarChar{NVarChar(temp), true}))
 	default:
 		if temp, ok := value.Interface().(sql.Scanner); ok {
-			if temp != nil && !reflect.ValueOf(temp).IsNil() {
+			if scannerIsAvailable(temp) {
 				return temp.Scan(input)
 			}
 		}
@@ -250,7 +263,7 @@ func setString(value reflect.Value, input string) error {
 		value.Set(reflect.ValueOf(NClob{String: input, Valid: true}))
 	default:
 		if temp, ok := value.Interface().(sql.Scanner); ok {
-			if temp != nil && !reflect.ValueOf(temp).IsNil() {
+			if scannerIsAvailable(temp) {
 				return temp.Scan(input)
 			}
 		}
@@ -292,7 +305,7 @@ func setBytes(value reflect.Value, input []byte) error {
 		value.Set(reflect.ValueOf(NullNVarChar{NVarChar(input), true}))
 	default:
 		if temp, ok := value.Interface().(sql.Scanner); ok {
-			if temp != nil && !reflect.ValueOf(temp).IsNil() {
+			if scannerIsAvailable(temp) {
 				return temp.Scan(input)
 			}
 		}
@@ -343,7 +356,7 @@ func setTime(value reflect.Value, input time.Time) error {
 		value.Set(reflect.ValueOf(NullTimeStampTZ{TimeStampTZ(input), true}))
 	default:
 		if temp, ok := value.Interface().(sql.Scanner); ok {
-			if temp != nil && !reflect.ValueOf(temp).IsNil() {
+			if scannerIsAvailable(temp) {
 				return temp.Scan(input)
 			}
 		}
@@ -373,12 +386,26 @@ func setFieldValue(fieldValue reflect.Value, cust *customType, input interface{}
 		return nil
 	}
 
+	fieldType := fieldValue.Type()
+	if fieldType.Kind() == reflect.Ptr {
+		fieldType = fieldType.Elem()
+	}
+	bypassScanner := false
+	if _, ok := input.(string); ok {
+		switch fieldType {
+		case tyTime, tyNullTime, tyTimeStamp, tyNullTimeStamp, tyTimeStampTZ, tyNullTimeStampTZ:
+			bypassScanner = true
+		}
+	}
+
 	// Special case: We must check if the field implements scanner for enum types and other primitive type aliases
-	if temp, ok := fieldValue.Interface().(sql.Scanner); ok && temp != nil && !reflect.ValueOf(temp).IsNil() {
-		return temp.Scan(input)
-	} else if fieldValue.CanAddr() {
-		if temp, ok = fieldValue.Addr().Interface().(sql.Scanner); ok && temp != nil && !reflect.ValueOf(temp).IsNil() {
+	if !bypassScanner {
+		if temp, ok := fieldValue.Interface().(sql.Scanner); ok && scannerIsAvailable(temp) {
 			return temp.Scan(input)
+		} else if fieldValue.CanAddr() {
+			if temp, ok = fieldValue.Addr().Interface().(sql.Scanner); ok && scannerIsAvailable(temp) {
+				return temp.Scan(input)
+			}
 		}
 	}
 
@@ -407,7 +434,7 @@ func setFieldValue(fieldValue reflect.Value, cust *customType, input interface{}
 		return setUDTObject(fieldValue, cust, val)
 	default:
 		if temp, ok := fieldValue.Interface().(sql.Scanner); ok {
-			if temp != nil && !reflect.ValueOf(temp).IsNil() {
+			if scannerIsAvailable(temp) {
 				return temp.Scan(input)
 			}
 		}
@@ -514,7 +541,7 @@ func setLob(value reflect.Value, input Lob) error {
 		value.Set(reflect.ValueOf(lobData))
 	default:
 		if temp, ok := value.Interface().(sql.Scanner); ok {
-			if temp != nil && !reflect.ValueOf(temp).IsNil() {
+			if scannerIsAvailable(temp) {
 				return temp.Scan(lobData)
 			}
 		}
@@ -547,7 +574,7 @@ func setVector(value reflect.Value, input Vector) error {
 		value.Set(reflect.ValueOf(input.Data))
 	default:
 		if temp, ok := value.Interface().(sql.Scanner); ok {
-			if temp != nil && !reflect.ValueOf(temp).IsNil() {
+			if scannerIsAvailable(temp) {
 				return temp.Scan(input)
 			}
 		}
@@ -574,7 +601,7 @@ func setBFile(value reflect.Value, input BFile) error {
 		value.Set(reflect.ValueOf(input))
 	default:
 		if temp, ok := value.Interface().(sql.Scanner); ok {
-			if temp != nil && !reflect.ValueOf(temp).IsNil() {
+			if scannerIsAvailable(temp) {
 				return temp.Scan(input)
 			}
 		}

@@ -2,6 +2,7 @@ package go_ora
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -342,6 +343,23 @@ func TestSetArray(t *testing.T) {
 	fmt.Println(array)
 }
 
+type valueScanner struct {
+	err error
+}
+
+func (scanner valueScanner) Scan(interface{}) error {
+	return scanner.err
+}
+
+func TestSetFieldValueSupportsValueScanner(t *testing.T) {
+	expected := errors.New("value scanner called")
+	value := valueScanner{err: expected}
+	err := setFieldValue(reflect.ValueOf(value), nil, "input")
+	if !errors.Is(err, expected) {
+		t.Fatalf("expected value scanner error, got %v", err)
+	}
+}
+
 func TestSetNull(t *testing.T) {
 	var x int = 10
 	var xx float64 = 3.3
@@ -373,6 +391,24 @@ VALUES(:ID, :DATA1, :SEP1, :DATA2, :SEP2)`)
 		return
 	}
 	t.Log(data)
+}
+
+func TestParseSqlTextIgnoresCommentMarkersInsideStrings(t *testing.T) {
+	tests := []string{
+		`SELECT '/*' FROM DUAL WHERE :PARAM = 1`,
+		`SELECT '*/' FROM DUAL WHERE :PARAM = 1`,
+		`SELECT '--' FROM DUAL WHERE :PARAM = 1`,
+		`SELECT "--" FROM DUAL WHERE :PARAM = 1`,
+	}
+	for _, query := range tests {
+		data, err := parseQueryParametersNames(query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(data) != 1 || data[0] != "PARAM" {
+			t.Fatalf("expected [PARAM] for %q, got %v", query, data)
+		}
+	}
 }
 
 func TestCatchReturning(t *testing.T) {
