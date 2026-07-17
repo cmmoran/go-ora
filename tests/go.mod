@@ -7,6 +7,7 @@ toolchain go1.24.9
 require (
 	github.com/cmmoran/go-ora/v2 v2.9.2
 	github.com/cmmoran/gorm-oracle v0.3.1
+	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.11.1
 	gorm.io/gorm v1.31.0
 	xorm.io/xorm v1.3.11

@@ -394,6 +394,34 @@ passing input parameters as defined by database/sql package.
 >   * TimeStampTZ
 >   * sql.Null* and go_ora.Null* for all the above
 >   * Clob, NClob and Blob
+
+#### UUID and RAW(16)
+
+UUID-shaped strings are bound to Oracle as `RAW(16)` automatically. Both the
+canonical dashed form (`a40b65f9-5d1d-415c-a2ac-fea0933c8d4e`) and Oracle's
+compact 32-hex-character form (`a40b65f95d1d415ca2acfea0933c8d4e`) are
+accepted. Types whose underlying representation is `[16]byte`, including
+`github.com/google/uuid.UUID`, are also bound as 16 raw bytes.
+
+Use `go_ora.UUIDString` when an application wants a string-like value that
+implements both `sql.Scanner` and `driver.Valuer`. It scans `RAW(16)` and either
+supported text form, presents the canonical dashed form, and binds as
+`RAW(16)`:
+
+```golang
+id, err := go_ora.ParseUUIDString("a40b65f95d1d415ca2acfea0933c8d4e")
+// check err
+_, err = db.Exec("INSERT INTO records (id) VALUES (:1)", id)
+
+var loaded go_ora.UUIDString
+err = db.QueryRow("SELECT id FROM records").Scan(&loaded)
+```
+
+UUID inference intentionally takes precedence for plain UUID-shaped strings.
+When a UUID-shaped value must be stored in a character column, use
+`go_ora.VarChar(value)` or `go_ora.NVarChar(value)` to explicitly select the
+database or national character set.
+
 * ### output parameters
   * passing parameter to Exec to return a value.
   * output parameter should be passed as pointers.
