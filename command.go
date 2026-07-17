@@ -21,6 +21,8 @@ import (
 
 type StmtType int
 
+const maxTTCFieldCount = 1<<16 - 1
+
 const (
 	SELECT StmtType = 1
 	DML    StmtType = 2
@@ -83,6 +85,12 @@ func (stmt *defaultStmt) hasBLOB() bool {
 // basicWrite this is the default write procedure for the all type of stmt
 // through it the stmt data will send to network stream
 func (stmt *defaultStmt) basicWrite(exeOp int, parse, define bool) error {
+	if len(stmt.Pars) > maxTTCFieldCount {
+		return fmt.Errorf("statement has %d parameters; Oracle TTC supports at most %d", len(stmt.Pars), maxTTCFieldCount)
+	}
+	if len(stmt.columns) > maxTTCFieldCount {
+		return fmt.Errorf("statement has %d define columns; Oracle TTC supports at most %d", len(stmt.columns), maxTTCFieldCount)
+	}
 	session := stmt.connection.session
 	strConv, _ := stmt.connection.getStrConv(stmt.connection.tcpNego.ServerCharset)
 	session.PutBytes(3, 0x5E, 0)
@@ -877,7 +885,7 @@ func (stmt *defaultStmt) read(resultSet *ResultSet) (err error) {
 					}
 					if len(bty) >= 8 {
 						stmt.queryID = binary.LittleEndian.Uint64(bty[size-8:])
-						fmt.Println("query ID: ", stmt.queryID)
+						stmt.connection.tracer.Print("query ID: ", stmt.queryID)
 					}
 				}
 			}
@@ -1077,24 +1085,25 @@ func (stmt *defaultStmt) freeTemporaryLobs() error {
 			session.PutBytes(locator...)
 		}
 	}
-	start := 0
-	end := 0
 	session.ResetBuffer()
-	for start < len(stmt.temporaryLobs) {
-		end = start + 25000
-		// end = start + 25
-		if end > len(stmt.temporaryLobs) {
-			end = len(stmt.temporaryLobs)
-		}
-		freeTemp(stmt.temporaryLobs[start:end])
-		start += end
-	}
+	forEachLocatorChunk(stmt.temporaryLobs, 25000, freeTemp)
 	session.PutBytes(0x3, 0x93, 0x0)
 	err := session.Write()
 	if err != nil {
 		return err
 	}
 	return stmt.connection.read()
+}
+
+func forEachLocatorChunk(locators [][]byte, chunkSize int, fn func([][]byte)) {
+	for start := 0; start < len(locators); {
+		end := start + chunkSize
+		if end > len(locators) {
+			end = len(locators)
+		}
+		fn(locators[start:end])
+		start = end
+	}
 }
 
 // requestCustomTypeInfo an experimental function to ask for UDT information
@@ -1153,7 +1162,7 @@ func (stmt *defaultStmt) requestCustomTypeInfo(typeName string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%#v\n", data)
+	stmt.connection.tracer.Printf("custom type info: %#v", data)
 	session.LoadState()
 	return nil
 }

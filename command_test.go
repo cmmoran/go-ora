@@ -56,3 +56,31 @@ END;
 		}
 	})
 }
+
+func TestForEachLocatorChunkVisitsEveryLocator(t *testing.T) {
+	locators := make([][]byte, 60001)
+	visited := 0
+	chunks := 0
+	forEachLocatorChunk(locators, 25000, func(chunk [][]byte) {
+		visited += len(chunk)
+		chunks++
+	})
+	if visited != len(locators) {
+		t.Fatalf("expected %d visited locators, got %d", len(locators), visited)
+	}
+	if chunks != 3 {
+		t.Fatalf("expected 3 chunks, got %d", chunks)
+	}
+}
+
+func TestBasicWriteRejectsTTCFieldCountOverflow(t *testing.T) {
+	stmt := &defaultStmt{Pars: make([]ParameterInfo, maxTTCFieldCount+1)}
+	if err := stmt.basicWrite(0, false, false); err == nil {
+		t.Fatal("expected parameter count error")
+	}
+
+	stmt = &defaultStmt{columns: make([]ParameterInfo, maxTTCFieldCount+1)}
+	if err := stmt.basicWrite(0, false, false); err == nil {
+		t.Fatal("expected define column count error")
+	}
+}

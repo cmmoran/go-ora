@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/binary"
-	"fmt"
 )
 
 var (
@@ -269,7 +268,7 @@ func (bulk *BulkCopy) readPrepareResponse() error {
 				if err != nil {
 					return err
 				}
-				fmt.Println(key, "\t", val, "\t", num)
+				bulk.conn.tracer.Print(key, "\t", val, "\t", num)
 			}
 			length, err = session.GetInt(2, true, true)
 			if err != nil {
