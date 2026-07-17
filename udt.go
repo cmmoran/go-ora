@@ -4,7 +4,36 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 )
+
+type customTypeRegistry struct {
+	mu    sync.RWMutex
+	types map[string]customType
+}
+
+func newCustomTypeRegistry() *customTypeRegistry {
+	return &customTypeRegistry{types: make(map[string]customType)}
+}
+
+func (registry *customTypeRegistry) snapshot() map[string]customType {
+	if registry == nil {
+		return nil
+	}
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+	snapshot := make(map[string]customType, len(registry.types))
+	for name, value := range registry.types {
+		snapshot[name] = value
+	}
+	return snapshot
+}
+
+func (registry *customTypeRegistry) set(name string, value customType) {
+	registry.mu.Lock()
+	registry.types[name] = value
+	registry.mu.Unlock()
+}
 
 type customType struct {
 	owner string
@@ -248,7 +277,7 @@ func NewObject(owner, name string, value interface{}) *Object {
 func (obj Object) SetDataType(conn *Connection, par *ParameterInfo) error {
 	par.DataType = XMLType
 	par.Value = obj.Value
-	for name, cusType := range conn.cusTyp {
+	for name, cusType := range conn.cusTyp.snapshot() {
 		if strings.EqualFold(name, obj.Name) {
 			par.cusType = new(customType)
 			*par.cusType = cusType

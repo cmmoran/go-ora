@@ -17,7 +17,7 @@ import (
 
 type OracleDriver struct {
 	dataCollected bool
-	cusTyp        map[string]customType
+	cusTyp        *customTypeRegistry
 	sessionParam  map[string]string
 	mu            sync.Mutex
 	sStrConv      converters.IStringConverter
@@ -35,7 +35,7 @@ type OracleDriver struct {
 }
 
 var oracleDriver = &OracleDriver{
-	cusTyp:       map[string]customType{},
+	cusTyp:       newCustomTypeRegistry(),
 	sessionParam: map[string]string{},
 }
 
@@ -53,9 +53,22 @@ func GetDefaultDriver() *OracleDriver {
 
 func NewDriver() *OracleDriver {
 	return &OracleDriver{
-		cusTyp:       map[string]customType{},
+		cusTyp:       newCustomTypeRegistry(),
 		sessionParam: map[string]string{},
 	}
+}
+
+func (driver *OracleDriver) cloneStringConverters() (converters.IStringConverter, converters.IStringConverter) {
+	driver.mu.Lock()
+	defer driver.mu.Unlock()
+	var charset, nCharset converters.IStringConverter
+	if driver.sStrConv != nil {
+		charset = driver.sStrConv.Clone()
+	}
+	if driver.nStrConv != nil {
+		nCharset = driver.nStrConv.Clone()
+	}
+	return charset, nCharset
 }
 
 func (driver *OracleDriver) init(conn *Connection) error {
@@ -91,6 +104,8 @@ func (driver *OracleDriver) init(conn *Connection) error {
 // passing nil will use driver string converter for supported langs
 func SetStringConverter(db GetDriverInterface, charset, nCharset converters.IStringConverter) {
 	if driver, ok := db.Driver().(*OracleDriver); ok {
+		driver.mu.Lock()
+		defer driver.mu.Unlock()
 		driver.sStrConv = charset
 		driver.nStrConv = nCharset
 	}
@@ -371,7 +386,7 @@ func RegisterTypeWithOwner(conn *sql.DB, owner, typeName, arrayTypeName string, 
 				param.MaxLen = int(length.Int64) * converters.MaxBytePerChar(param.CharsetID)
 			default:
 				found := false
-				for name, value := range drv.cusTyp {
+				for name, value := range drv.cusTyp.snapshot() {
 					if strings.EqualFold(name, attTypeName.String) {
 						found = true
 						param.DataType = XMLType
@@ -404,9 +419,7 @@ func RegisterTypeWithOwner(conn *sql.DB, owner, typeName, arrayTypeName string, 
 		*arrayParam.cusType = cust
 
 		cust.loadFieldMap()
-		drv.mu.Lock()
-		drv.cusTyp[strings.ToUpper(typeName)] = cust
-		drv.mu.Unlock()
+		drv.cusTyp.set(strings.ToUpper(typeName), cust)
 	}
 	if len(arrayTypeName) > 0 {
 		var err error
@@ -415,9 +428,7 @@ func RegisterTypeWithOwner(conn *sql.DB, owner, typeName, arrayTypeName string, 
 			return err
 		}
 		arrayCust.attribs = append(arrayCust.attribs, arrayParam)
-		drv.mu.Lock()
-		drv.cusTyp[strings.ToUpper(arrayTypeName)] = arrayCust
-		drv.mu.Unlock()
+		drv.cusTyp.set(strings.ToUpper(arrayTypeName), arrayCust)
 	}
 
 	return nil
@@ -432,7 +443,7 @@ func ParseConfig(dsn string) (*configurations.ConnectionConfig, error) {
 		return nil, err
 	}
 	if len(config.OSPassword) > 0 {
-		SetNTSAuth(&advanced_nego.NTSAuthHash{})
+		config.NTS = &advanced_nego.NTSAuthHash{}
 	}
 	return config, nil
 	// connStr, err := newConnectionStringFromUrl(dsn)

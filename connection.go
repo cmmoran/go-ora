@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cmmoran/go-ora/v2/lazy_init"
@@ -100,7 +101,7 @@ type Connection struct {
 	nStrConv          converters.IStringConverter
 	cStrConv          converters.IStringConverter
 	NLSData           NLSData
-	cusTyp            map[string]customType
+	cusTyp            *customTypeRegistry
 	maxLen            struct {
 		varchar   int
 		nvarchar  int
@@ -109,7 +110,7 @@ type Connection struct {
 		date      int
 		timestamp int
 	}
-	bad                      bool
+	bad                      atomic.Bool
 	dbTimeZone               *time.Location // equivalent to database timezone used for timestamp with local timezone
 	dbServerTimeZone         *time.Location // equivalent to timezone of the server carry the database
 	dbServerTimeZoneExplicit *time.Location
@@ -121,6 +122,7 @@ type OracleConnector struct {
 	dialer        configurations.DialerContext
 	tlsConfig     *tls.Config
 	kerberos      configurations.KerberosAuthInterface
+	nts           configurations.NTSAuthInterface
 }
 
 func NewConnector(connString string) driver.Connector {
@@ -138,12 +140,7 @@ func (connector *OracleConnector) Connect(ctx context.Context) (driver.Conn, err
 		return nil, err
 	}
 	conn.cusTyp = connector.drv.cusTyp
-	if connector.drv.sStrConv != nil {
-		conn.sStrConv = connector.drv.sStrConv.Clone()
-	}
-	if connector.drv.nStrConv != nil {
-		conn.nStrConv = connector.drv.nStrConv.Clone()
-	}
+	conn.sStrConv, conn.nStrConv = connector.drv.cloneStringConverters()
 	if conn.connOption.Dialer == nil {
 		conn.connOption.Dialer = connector.dialer
 	}
@@ -153,12 +150,16 @@ func (connector *OracleConnector) Connect(ctx context.Context) (driver.Conn, err
 	if conn.connOption.Kerberos == nil {
 		conn.connOption.Kerberos = connector.kerberos
 	}
+	if conn.connOption.NTS == nil {
+		conn.connOption.NTS = connector.nts
+	}
 	err = conn.OpenWithContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 	err = connector.drv.init(conn)
 	if err != nil {
+		_ = conn.Close()
 		return nil, err
 	}
 	return conn, nil
@@ -181,6 +182,11 @@ func (connector *OracleConnector) WithKerberosAuth(auth configurations.KerberosA
 	connector.kerberos = auth
 }
 
+// WithNTSAuth sets the NTS authenticator for connections created by this connector.
+func (connector *OracleConnector) WithNTSAuth(auth configurations.NTSAuthInterface) {
+	connector.nts = auth
+}
+
 // Open return a new open connection
 func (driver *OracleDriver) Open(name string) (driver.Conn, error) {
 	conn, err := NewConnection(name, driver.connOption)
@@ -194,6 +200,7 @@ func (driver *OracleDriver) Open(name string) (driver.Conn, error) {
 	}
 	err = driver.init(conn)
 	if err != nil {
+		_ = conn.Close()
 		return nil, err
 	}
 	return conn, nil
@@ -317,22 +324,21 @@ func (conn *Connection) getDefaultStrConv() (converters.IStringConverter, error)
 	return conn.getStrConv(conn.getDefaultCharsetID())
 }
 func (conn *Connection) getStrConv(charsetID int) (converters.IStringConverter, error) {
+	if conn.cStrConv != nil && charsetID == conn.cStrConv.GetLangID() {
+		return conn.cStrConv, nil
+	}
 	if conn.sStrConv != nil && charsetID == conn.sStrConv.GetLangID() {
-		if conn.cStrConv != nil {
-			return conn.cStrConv, nil
-		}
 		return conn.sStrConv, nil
 	}
 
 	if conn.nStrConv != nil && charsetID == conn.nStrConv.GetLangID() {
 		return conn.nStrConv, nil
 	}
-	return conn.sStrConv, nil
-	//temp := converters.NewStringConverter(charsetID)
-	//if temp == nil {
-	//	return nil, fmt.Errorf("server requested charset id: %d which is not supported by the driver", charsetID)
-	//}
-	//return temp, nil
+	temp := converters.NewStringConverter(charsetID)
+	if temp == nil {
+		return nil, fmt.Errorf("server requested charset id: %d which is not supported by the driver", charsetID)
+	}
+	return temp, nil
 }
 
 func (conn *Connection) Logoff() error {
@@ -405,17 +411,21 @@ func (conn *Connection) Open() error {
 // }
 
 // OpenWithContext open the connection with timeout context
-func (conn *Connection) OpenWithContext(ctx context.Context) error {
+func (conn *Connection) OpenWithContext(ctx context.Context) (err error) {
+	conn.tracer = trace.NilTracer()
 	if len(conn.connOption.TraceDir) > 0 {
-		if err := os.MkdirAll(conn.connOption.TraceDir, os.ModePerm); err == nil {
-			now := time.Now()
-			traceFileName := fmt.Sprintf("%s/trace_%d_%02d_%02d_%02d_%02d_%02d_%d.log", conn.connOption.TraceDir,
-				now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(),
-				now.Nanosecond())
-			if tr, err := os.Create(traceFileName); err == nil {
-				conn.tracer = trace.NewTraceWriter(tr)
-			}
+		if err = os.MkdirAll(conn.connOption.TraceDir, os.ModePerm); err != nil {
+			return fmt.Errorf("create trace directory: %w", err)
 		}
+		now := time.Now()
+		traceFileName := fmt.Sprintf("%s/trace_%d_%02d_%02d_%02d_%02d_%02d_%d.log", conn.connOption.TraceDir,
+			now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(),
+			now.Nanosecond())
+		tr, createErr := os.Create(traceFileName)
+		if createErr != nil {
+			return fmt.Errorf("create trace file: %w", createErr)
+		}
+		conn.tracer = trace.NewTraceWriter(tr)
 	} else {
 		if len(conn.connOption.TraceFilePath) > 0 {
 			if conn.connOption.TraceFilePath == "-" {
@@ -428,8 +438,6 @@ func (conn *Connection) OpenWithContext(ctx context.Context) error {
 				}
 				conn.tracer = trace.NewTraceWriter(tf)
 			}
-		} else {
-			conn.tracer = trace.NilTracer()
 		}
 	}
 	tracer := conn.tracer
@@ -453,6 +461,16 @@ func (conn *Connection) OpenWithContext(ctx context.Context) error {
 	}
 	conn.connOption.ResetServerIndex()
 	conn.session = network.NewSession(conn.connOption, conn.tracer)
+	session := conn.session
+	defer func() {
+		if err == nil {
+			return
+		}
+		session.Disconnect()
+		conn.session = nil
+		conn.State = Closed
+		_ = conn.tracer.Close()
+	}()
 	W := conn.connOption.Wallet
 	if conn.connOption.SSL && W != nil {
 		err := conn.session.LoadSSLData(W.Certificates, W.PrivateKeys, W.CertificateRequests)
@@ -460,11 +478,10 @@ func (conn *Connection) OpenWithContext(ctx context.Context) error {
 			return err
 		}
 	}
-	session := conn.session
 	// start check for context
 	done := session.StartContext(ctx)
 	defer session.EndContext(done)
-	err := session.Connect(ctx)
+	err = session.Connect(ctx)
 	if err != nil {
 		return err
 	}
@@ -631,7 +648,7 @@ func NewConnection(databaseUrl string, config *configurations.ConnectionConfig) 
 		connOption: temp,
 		cStrConv:   converters.NewStringConverter(config.CharsetID),
 		autoCommit: true,
-		cusTyp:     map[string]customType{},
+		cusTyp:     newCustomTypeRegistry(),
 		maxLen: struct {
 			varchar   int
 			nvarchar  int
@@ -1011,7 +1028,7 @@ func (conn *Connection) Exec(text string, args ...driver.Value) (driver.Result, 
 }
 
 func SetNTSAuth(newNTSManager advanced_nego.NTSAuthInterface) {
-	advanced_nego.NTSAuth = newNTSManager
+	advanced_nego.SetNTSAuth(newNTSManager)
 }
 
 var insertQueryBracketsRegexp = lazy_init.NewLazyInit(func() (interface{}, error) {
@@ -1079,12 +1096,15 @@ var insertQueryBracketsRegexp = lazy_init.NewLazyInit(func() (interface{}, error
 // BulkInsert mass insert column values into a table
 // all columns should pass as an array of values
 func (conn *Connection) BulkInsert(sqlText string, rowNum int, columns ...[]driver.Value) (driver.Result, error) {
+	input, err := buildBulkInsertArgs(rowNum, columns)
+	if err != nil {
+		return nil, err
+	}
+	if rowNum == 0 {
+		return &QueryResult{}, nil
+	}
 	stmt := NewStmt(sqlText, conn)
 	stmt.autoClose = true
-	input := make([]driver.Value, 100)
-	for x := 0; x < rowNum; x++ {
-		input[x] = NewBatch(columns[x])
-	}
 	result, err := stmt.Exec(input)
 	if err != nil {
 		_ = stmt.Close()
@@ -1182,6 +1202,27 @@ func (conn *Connection) BulkInsert(sqlText string, rowNum int, columns ...[]driv
 	//return result, nil
 }
 
+func buildBulkInsertArgs(rowNum int, columns [][]driver.Value) ([]driver.Value, error) {
+	if rowNum < 0 {
+		return nil, fmt.Errorf("row count cannot be negative: %d", rowNum)
+	}
+	if len(columns) == 0 {
+		if rowNum == 0 {
+			return nil, nil
+		}
+		return nil, errors.New("bulk insert requires at least one column")
+	}
+
+	input := make([]driver.Value, len(columns))
+	for index, column := range columns {
+		if len(column) < rowNum {
+			return nil, fmt.Errorf("column %d has %d rows; expected at least %d", index, len(column), rowNum)
+		}
+		input[index] = NewBatch(column[:rowNum])
+	}
+	return input, nil
+}
+
 func (conn *Connection) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	stmt := NewStmt(query, conn)
 	stmt.autoClose = true
@@ -1213,6 +1254,7 @@ func (conn *Connection) QueryRowContext(ctx context.Context, query string, args 
 	}
 	dataSet, ok := rows.(*DataSet)
 	if !ok {
+		dataSet = &DataSet{}
 		dataSet.currentResultSet().lastErr = fmt.Errorf("expected DataSet, got %T", rows)
 		return dataSet
 	}
@@ -1230,7 +1272,14 @@ func WrapRefCursor(ctx context.Context, q Querier, cursor *RefCursor) (*sql.Rows
 
 func (conn *Connection) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	if query == wrapResultset {
-		return args[0].Value.(driver.Rows), nil
+		if len(args) != 1 {
+			return nil, fmt.Errorf("wrapped result set requires exactly one argument, got %d", len(args))
+		}
+		rows, ok := args[0].Value.(driver.Rows)
+		if !ok || rows == nil {
+			return nil, fmt.Errorf("wrapped result set requires driver.Rows, got %T", args[0].Value)
+		}
+		return rows, nil
 	}
 	stmt := NewStmt(query, conn)
 	stmt.autoClose = true
@@ -1323,7 +1372,7 @@ func (conn *Connection) readMsg(msgCode uint8) error {
 				}
 				if len(bty) >= 8 {
 					queryID := binary.LittleEndian.Uint64(bty[size-8:])
-					os.Stderr.WriteString(fmt.Sprintln("query ID: ", queryID))
+					conn.tracer.Print("query ID: ", queryID)
 				}
 			}
 		}
@@ -1364,7 +1413,7 @@ func (conn *Connection) readMsg(msgCode uint8) error {
 			return err
 		}
 		if warning != nil {
-			os.Stderr.WriteString(fmt.Sprintln(warning))
+			conn.tracer.Print(warning)
 		}
 	case 23:
 		opCode, err := session.GetByte()
@@ -1392,14 +1441,18 @@ func (conn *Connection) readMsg(msgCode uint8) error {
 }
 
 func (conn *Connection) setBad() {
-	conn.bad = true
+	conn.bad.Store(true)
 }
 
 func (conn *Connection) ResetSession(_ context.Context) error {
-	if conn.bad {
+	if conn.bad.Load() {
 		return driver.ErrBadConn
 	}
 	return nil
+}
+
+func (conn *Connection) IsValid() bool {
+	return !conn.bad.Load() && conn.State == Opened
 }
 
 func (conn *Connection) dataTypeNegotiation() error {

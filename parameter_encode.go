@@ -155,7 +155,7 @@ func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, dat
 		if par.DataType == XMLType {
 			// par.cusType is for item I should get that of array
 			found := false
-			for _, cust := range conn.cusTyp {
+			for _, cust := range conn.cusTyp.snapshot() {
 				if cust.isArray && len(cust.attribs) > 0 {
 					if par.cusType.name == cust.attribs[0].cusType.name {
 						found = true
@@ -176,7 +176,7 @@ func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, dat
 	case reflect.Struct:
 		// see if the struct is support valuer interface
 
-		for _, cusTyp := range conn.cusTyp {
+		for _, cusTyp := range conn.cusTyp.snapshot() {
 			if goType == cusTyp.typ {
 				par.cusType = new(customType)
 				*par.cusType = cusTyp

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 
 	"github.com/cmmoran/go-ora/v2/configurations"
 	"github.com/cmmoran/go-ora/v2/network"
@@ -16,11 +17,22 @@ var version = 0xB200200
 // KerberosAuthInterface is an alias for configurations.KerberosAuthInterface, maintained for backwards compatibility.
 type KerberosAuthInterface = configurations.KerberosAuthInterface
 
-var kerberosAuth KerberosAuthInterface = nil
+var (
+	kerberosAuthMu sync.RWMutex
+	kerberosAuth   KerberosAuthInterface
+)
 
 // SetKerberosAuth Set Kerberos5 Authentication interface used for kerberos authentication
 func SetKerberosAuth(input KerberosAuthInterface) {
+	kerberosAuthMu.Lock()
+	defer kerberosAuthMu.Unlock()
 	kerberosAuth = input
+}
+
+func getKerberosAuth() KerberosAuthInterface {
+	kerberosAuthMu.RLock()
+	defer kerberosAuthMu.RUnlock()
+	return kerberosAuth
 }
 
 type AdvNego struct {
@@ -170,15 +182,16 @@ func (nego *AdvNego) Read() error {
 		}
 	}
 	if authKerberos {
+		globalAuth := getKerberosAuth()
 		// Validate configuration
-		if kerberosAuth == nil && nego.negoInfo.Kerberos == nil {
+		if globalAuth == nil && nego.negoInfo.Kerberos == nil {
 			return fmt.Errorf("advanced negotiation error: Kerberos authenticator not set; call SetKerberosAuth to set it globally or WithKerberosAuth to set it per session")
 		}
 
 		// Prefer session-specific Kerberos auth object
 		auth := nego.negoInfo.Kerberos
 		if auth == nil {
-			auth = kerberosAuth
+			auth = globalAuth
 		}
 
 		if authServ, ok := nego.serviceList[1].(*authService); ok {
@@ -195,7 +208,11 @@ func (nego *AdvNego) Read() error {
 		}
 	}
 	if authNTS {
-		ntsPacket, err := createNTSNegoPacket(nego.clientInfo.DomainName, nego.clientInfo.HostName)
+		auth := nego.negoInfo.NTS
+		if auth == nil {
+			auth = getNTSAuth()
+		}
+		ntsPacket, err := createNTSNegoPacket(auth, nego.clientInfo.DomainName, nego.clientInfo.HostName)
 		if err != nil {
 			return err
 		}
@@ -215,7 +232,7 @@ func (nego *AdvNego) Read() error {
 		if err != nil {
 			return err
 		}
-		ntsPacket, err = createNTSAuthPacket(chaData, nego.clientInfo.OSUserName,
+		ntsPacket, err = createNTSAuthPacket(auth, chaData, nego.clientInfo.OSUserName,
 			nego.clientInfo.OSPassword)
 		if err != nil {
 			return err

@@ -281,7 +281,7 @@ func (par *ParameterInfo) load(conn *Connection) error {
 	}
 	par.TypeName = strings.ToUpper(session.StrConv.Decode(bName))
 	if par.DataType == XMLType && par.TypeName != "XMLTYPE" {
-		for typName, cusTyp := range conn.cusTyp {
+		for typName, cusTyp := range conn.cusTyp.snapshot() {
 			if typName == par.TypeName {
 				par.cusType = new(customType)
 				*par.cusType = cusTyp

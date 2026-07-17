@@ -25,12 +25,19 @@ type KerberosAuthInterface interface {
 	Authenticate(server, service string) ([]byte, error)
 }
 
+type NTSAuthInterface interface {
+	NewNegotiateMessage(domain, machine string) ([]byte, error)
+	ProcessChallenge(chaMsgData []byte, user, password string) ([]byte, error)
+}
+
 type AdvNegoServiceInfo struct {
 	AuthService     []string
 	EncServiceLevel int
 	IntServiceLevel int
 	// Kerberos is an optional session-specific auth, which will be preferred over the global interface if present.
 	Kerberos KerberosAuthInterface
+	// NTS is an optional session-specific auth, which will be preferred over the legacy global interface if present.
+	NTS NTSAuthInterface
 }
 type ConnectionConfig struct {
 	ClientInfo
@@ -489,7 +496,7 @@ func (config *ConnectionConfig) validate() error {
 	if config.AuthType == TCPS {
 		config.AuthService = append(config.AuthService, "TCPS")
 	}
-	if len(config.UserID) == 0 || len(config.Password) == 0 && config.AuthType == Normal {
+	if (len(config.UserID) == 0 || len(config.Password) == 0) && config.AuthType == Normal {
 		config.AuthType = OS
 	}
 	if config.AuthType == OS {
