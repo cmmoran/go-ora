@@ -1,10 +1,39 @@
 package converters
 
 import (
+	"bytes"
 	"math"
 	"reflect"
 	"testing"
 )
+
+func TestEncodeUUIDLike(t *testing.T) {
+	want := []byte{0xa4, 0x0b, 0x65, 0xf9, 0x5d, 0x1d, 0x41, 0x5c, 0xa2, 0xac, 0xfe, 0xa0, 0x93, 0x3c, 0x8d, 0x4e}
+	tests := []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{name: "canonical", value: "a40b65f9-5d1d-415c-a2ac-fea0933c8d4e", valid: true},
+		{name: "compact", value: "a40b65f95d1d415ca2acfea0933c8d4e", valid: true},
+		{name: "uppercase", value: "A40B65F9-5D1D-415C-A2AC-FEA0933C8D4E", valid: true},
+		{name: "misplaced hyphens", value: "a40b-65f95d1d415ca2acfea0933c8d4e", valid: false},
+		{name: "extra hyphens", value: "-a40b65f95d1d415ca2acfea0933c8d4e-", valid: false},
+		{name: "invalid hex", value: "g40b65f95d1d415ca2acfea0933c8d4e", valid: false},
+		{name: "braced", value: "{a40b65f9-5d1d-415c-a2ac-fea0933c8d4e}", valid: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, valid := EncodeUUIDLike(test.value)
+			if valid != test.valid {
+				t.Fatalf("expected valid=%v, got %v (%x)", test.valid, valid, got)
+			}
+			if valid && !bytes.Equal(got, want) {
+				t.Fatalf("expected %x, got %x", want, got)
+			}
+		})
+	}
+}
 
 // Some documentation:
 //	https://gotodba.com/2015/03/24/how-are-numbers-saved-in-oracle/

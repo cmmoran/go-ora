@@ -7,7 +7,6 @@ import (
 	"math"
 	"math/bits"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -195,30 +194,27 @@ func durationForPrecision(p int) time.Duration {
 }
 
 func EncodeUUIDLike(s string) ([]byte, bool) {
-	if strings.ContainsRune(s, '-') {
-		buf := make([]byte, 0, 32)
-		for i := 0; i < len(s); i++ {
-			if s[i] != '-' {
-				buf = append(buf, s[i])
-			}
+	switch len(s) {
+	case 32:
+	case 36:
+		if s[8] != '-' || s[13] != '-' || s[18] != '-' || s[23] != '-' {
+			return nil, false
 		}
-		s = string(buf)
+		s = s[:8] + s[9:13] + s[14:18] + s[19:23] + s[24:]
+	default:
+		return nil, false
 	}
 
-	if len(s) == 32 {
-		out := make([]byte, 16)
-		for i := 0; i < 16; i++ {
-			h1, ok1 := fromHex(s[i*2])
-			h2, ok2 := fromHex(s[i*2+1])
-			if !ok1 || !ok2 {
-				goto notuuid
-			}
-			out[i] = (h1 << 4) | h2
+	out := make([]byte, 16)
+	for i := 0; i < 16; i++ {
+		h1, ok1 := fromHex(s[i*2])
+		h2, ok2 := fromHex(s[i*2+1])
+		if !ok1 || !ok2 {
+			return nil, false
 		}
-		return out, true
+		out[i] = (h1 << 4) | h2
 	}
-notuuid:
-	return nil, false
+	return out, true
 }
 
 func fromHex(r byte) (byte, bool) {

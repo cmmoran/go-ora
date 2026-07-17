@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cmmoran/go-ora/v2/converters"
 	"github.com/cmmoran/go-ora/v2/lazy_init"
 
 	"github.com/cmmoran/go-ora/v2/network"
@@ -292,45 +293,9 @@ func asRaw16(v reflect.Value) ([]byte, bool) {
 
 	// UUID-ish string (with or without '-')
 	if v.IsValid() && v.Kind() == reflect.String {
-		s := v.String()
-		// Remove hyphens if present
-		if strings.ContainsRune(s, '-') {
-			buf := make([]byte, 0, 32)
-			for i := 0; i < len(s); i++ {
-				if s[i] != '-' {
-					buf = append(buf, s[i])
-				}
-			}
-			s = string(buf)
-		}
-
-		if len(s) == 32 {
-			out := make([]byte, 16)
-			for i := 0; i < 16; i++ {
-				h1, ok1 := fromHex(s[i*2])
-				h2, ok2 := fromHex(s[i*2+1])
-				if !ok1 || !ok2 {
-					goto notuuid
-				}
-				out[i] = (h1 << 4) | h2
-			}
-			return out, true
-		}
+		return converters.EncodeUUIDLike(v.String())
 	}
-notuuid:
 	return nil, false
-}
-
-func fromHex(r byte) (byte, bool) {
-	switch {
-	case '0' <= r && r <= '9':
-		return r - '0', true
-	case 'a' <= r && r <= 'f':
-		return r - 'a' + 10, true
-	case 'A' <= r && r <= 'F':
-		return r - 'A' + 10, true
-	}
-	return 0, false
 }
 
 func processReset(err error, conn *Connection) error {
