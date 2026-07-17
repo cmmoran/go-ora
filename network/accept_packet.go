@@ -37,18 +37,29 @@ func newAcceptPacketFromData(packetData []byte, config *configurations.Connectio
 	if len(packetData) < 32 {
 		return nil
 	}
-	reconAddStart := binary.BigEndian.Uint16(packetData[28:])
-	reconAddLen := binary.BigEndian.Uint16(packetData[30:])
+	version := binary.BigEndian.Uint16(packetData[8:])
+	if version >= 315 && len(packetData) < 40 {
+		return nil
+	}
+	reconAddStart := int(binary.BigEndian.Uint16(packetData[28:]))
+	reconAddLen := int(binary.BigEndian.Uint16(packetData[30:]))
 	reconAdd := ""
-	if reconAddStart != 0 && reconAddLen != 0 && uint16(len(packetData)) > (reconAddStart+reconAddLen) {
+	if reconAddStart != 0 && reconAddLen != 0 {
+		if reconAddStart > len(packetData) || reconAddLen > len(packetData)-reconAddStart {
+			return nil
+		}
 		reconAdd = string(packetData[reconAddStart:(reconAddStart + reconAddLen)])
+	}
+	dataOffset := int(binary.BigEndian.Uint16(packetData[20:]))
+	if dataOffset > len(packetData) {
+		return nil
 	}
 	pck := AcceptPacket{
 		Packet: Packet{
 			sessionCtx: &SessionContext{
 				connConfig:          config,
 				SID:                 nil,
-				Version:             binary.BigEndian.Uint16(packetData[8:]),
+				Version:             version,
 				LoVersion:           0,
 				Options:             0,
 				NegotiatedOptions:   binary.BigEndian.Uint16(packetData[10:]),
@@ -70,13 +81,19 @@ func newAcceptPacketFromData(packetData []byte, config *configurations.Connectio
 			flag:       packetData[5],
 		},
 	}
-	pck.buffer = packetData[int(pck.dataOffset):]
+	pck.buffer = packetData[dataOffset:]
 	if pck.sessionCtx.Version >= 315 {
 		pck.sessionCtx.SessionDataUnit = binary.BigEndian.Uint32(packetData[32:])
 		pck.sessionCtx.TransportDataUnit = binary.BigEndian.Uint32(packetData[36:])
 	}
 	if (pck.flag & 1) > 0 {
+		if pck.length < 16 {
+			return nil
+		}
 		pck.length -= 16
+		if pck.length > uint32(len(packetData)) {
+			return nil
+		}
 		pck.sessionCtx.SID = packetData[int(pck.length):]
 	}
 	if pck.sessionCtx.TransportDataUnit < pck.sessionCtx.SessionDataUnit {

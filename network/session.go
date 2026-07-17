@@ -29,6 +29,16 @@ import (
 // var ErrConnectionReset error = errors.New("connection reset")
 var read_buffer_size = 0x4000
 
+const (
+	maxConnectRedirects = 16
+	maxResendRequests   = 8
+)
+
+var (
+	ErrConnectTransitionLimit = errors.New("network: connect redirect/refuse limit exceeded")
+	ErrResendLimit            = errors.New("network: packet resend limit exceeded")
+)
+
 type Data interface {
 	Write(session *Session) error
 	Read(session *Session) error
@@ -210,9 +220,9 @@ func (session *Session) StartContext(ctx context.Context) chan struct{} {
 			case <-done:
 				return
 			default:
-				session.mu.Lock()
+				mu.Lock()
 				connected := session.Connected
-				session.mu.Unlock()
+				mu.Unlock()
 				if connected {
 					if err = session.BreakConnection(); err != nil {
 						tracer.Print("Connection Break Error: ", err)
@@ -340,7 +350,10 @@ func (session *Session) negotiate() {
 	host := connOption.GetActiveServer(false)
 
 	if tlsConfig := connOption.TLSConfig; tlsConfig != nil {
-		tlsConfig.ServerName = host.Addr
+		tlsConfig = tlsConfig.Clone()
+		if tlsConfig.ServerName == "" && host != nil {
+			tlsConfig.ServerName = host.Addr
+		}
 		session.sslConn = tls.Client(session.conn, tlsConfig)
 		return
 	}
@@ -351,8 +364,9 @@ func (session *Session) negotiate() {
 			session.SSL.roots.AddCert(cert)
 		}
 	}
-	config := &tls.Config{
-		ServerName: host.Addr,
+	config := &tls.Config{}
+	if host != nil {
+		config.ServerName = host.Addr
 	}
 	if len(session.SSL.tlsCertificates) > 0 {
 		config.Certificates = session.SSL.tlsCertificates
@@ -507,6 +521,15 @@ func (session *Session) BreakConnection() error {
 // then send connect packet to the server and
 // receive either accept, redirect or refuse packet
 func (session *Session) Connect(ctx context.Context) error {
+	serverCount := len(session.Context.connConfig.Servers)
+	return session.connect(ctx, 0, serverCount+maxConnectRedirects)
+}
+
+func (session *Session) connect(ctx context.Context, transitions, transitionLimit int) error {
+	if transitions >= transitionLimit {
+		session.Disconnect()
+		return ErrConnectTransitionLimit
+	}
 	connOption := session.Context.connConfig
 	session.ResetBuffer()
 	session.Disconnect()
@@ -602,7 +625,7 @@ func (session *Session) Connect(ctx context.Context) error {
 		}
 		session.Context.connConfig.ResetServerIndex()
 		session.Context.isRedirect = true
-		return session.Connect(ctx)
+		return session.connect(ctx, transitions+1, transitionLimit)
 	}
 	if refusePacket, ok := pck.(*RefusePacket); ok {
 		refusePacket.extractErrCode()
@@ -618,7 +641,7 @@ func (session *Session) Connect(ctx context.Context) error {
 			session.Disconnect()
 			return refusePacket.Err
 		}
-		return session.Connect(ctx)
+		return session.connect(ctx, transitions+1, transitionLimit)
 	}
 	return errors.New("connection refused by the server due to unknown reason")
 }
@@ -1004,17 +1027,12 @@ func (session *Session) readPacketData() error {
 		return err
 	}
 	head := session.lastPacket.Bytes()
-	var length uint32
-	// pckType := PacketType(head[4])
-	// flag := head[5]
-
-	if session.Context.handshakeComplete && session.Context.Version >= 315 {
-		length = binary.BigEndian.Uint32(head)
-	} else {
-		length = uint32(binary.BigEndian.Uint16(head))
+	var bodyLength int
+	bodyLength, err = session.packetBodyLength(head)
+	if err != nil {
+		return err
 	}
-	length -= 8
-	err = session.readAll(int(length))
+	err = session.readAll(bodyLength)
 	if err != nil {
 		return err
 	}
@@ -1022,8 +1040,38 @@ func (session *Session) readPacketData() error {
 	return nil
 }
 
+func (session *Session) packetBodyLength(head []byte) (int, error) {
+	if len(head) < 8 {
+		return 0, fmt.Errorf("invalid packet header length: %d", len(head))
+	}
+	var packetLength uint32
+	if session.Context.handshakeComplete && session.Context.Version >= 315 {
+		packetLength = binary.BigEndian.Uint32(head)
+	} else {
+		packetLength = uint32(binary.BigEndian.Uint16(head))
+	}
+	if packetLength < 8 {
+		return 0, fmt.Errorf("invalid packet length: %d", packetLength)
+	}
+	if transportLimit := session.Context.TransportDataUnit; transportLimit >= 8 && packetLength > transportLimit {
+		return 0, fmt.Errorf("packet length %d exceeds transport data unit %d", packetLength, transportLimit)
+	}
+	bodyLength := uint64(packetLength - 8)
+	if bodyLength > uint64(^uint(0)>>1) {
+		return 0, fmt.Errorf("packet body length %d exceeds platform capacity", bodyLength)
+	}
+	return int(bodyLength), nil
+}
+
 // read a packet from network stream
 func (session *Session) readPacket() (PacketInterface, error) {
+	return session.readPacketWithResendCount(0)
+}
+
+func (session *Session) readPacketWithResendCount(resendCount int) (PacketInterface, error) {
+	if resendCount >= maxResendRequests {
+		return nil, ErrResendLimit
+	}
 	var err error
 	err = session.readPacketData()
 	if err != nil {
@@ -1082,13 +1130,24 @@ func (session *Session) readPacket() (PacketInterface, error) {
 		if err != nil {
 			return nil, err
 		}
-		return session.readPacket()
+		return session.readPacketWithResendCount(resendCount + 1)
 	case ACCEPT:
-		return newAcceptPacketFromData(packetData, session.Context.connConfig), nil
+		pck := newAcceptPacketFromData(packetData, session.Context.connConfig)
+		if pck == nil {
+			return nil, errors.New("invalid accept packet")
+		}
+		return pck, nil
 	case REFUSE:
-		return newRefusePacketFromData(packetData), nil
+		pck := newRefusePacketFromData(packetData)
+		if pck == nil {
+			return nil, errors.New("invalid refuse packet")
+		}
+		return pck, nil
 	case REDIRECT:
 		pck := newRedirectPacketFromData(packetData)
+		if pck == nil {
+			return nil, errors.New("invalid redirect packet")
+		}
 		dataLen := binary.BigEndian.Uint16(packetData[8:])
 		var data string
 		if uint16(pck.length) <= pck.dataOffset {
@@ -1100,6 +1159,9 @@ func (session *Session) readPacket() (PacketInterface, error) {
 			}
 			data = string(dataPck.buffer)
 		} else {
+			if int(dataLen) > len(packetData)-10 {
+				return nil, errors.New("invalid redirect packet data length")
+			}
 			data = string(packetData[10 : 10+dataLen])
 		}
 		// fmt.Println("data returned: ", data)
@@ -1127,7 +1189,11 @@ func (session *Session) readPacket() (PacketInterface, error) {
 		}
 		return nil, err
 	case MARKER:
-		return newMarkerPacketFromData(packetData, session.Context), nil
+		pck := newMarkerPacketFromData(packetData, session.Context)
+		if pck == nil {
+			return nil, errors.New("invalid marker packet")
+		}
+		return pck, nil
 		// switch pck.markerType {
 		// case 0:
 		// 	session.breakConn = true
@@ -1365,7 +1431,13 @@ func (session *Session) PutString(data string) {
 // GetString read a string data from input buffer
 func (session *Session) GetString(length int) (string, error) {
 	ret, err := session.GetClr()
-	return string(ret[:length]), err
+	if err != nil {
+		return "", err
+	}
+	if length < 0 || length > len(ret) {
+		return "", fmt.Errorf("decoded string length %d is smaller than requested length %d", len(ret), length)
+	}
+	return string(ret[:length]), nil
 }
 
 // PutBytes write bytes of data to output buffer
