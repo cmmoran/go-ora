@@ -1,6 +1,7 @@
 package go_ora
 
 import (
+	"bytes"
 	"context"
 	"database/sql/driver"
 	"errors"
@@ -261,6 +262,16 @@ func TestDriverStringConverterConfigurationConcurrent(t *testing.T) {
 		}
 	}()
 	wg.Wait()
+}
+
+func TestConnectorWithWalletRejectsMalformedData(t *testing.T) {
+	connector := NewConnector("oracle://user:pass@database.example/service").(*OracleConnector)
+	if err := connector.WithWallet(bytes.NewReader([]byte("not a wallet"))); err == nil {
+		t.Fatal("expected malformed wallet data to fail")
+	}
+	if connector.wallet != nil {
+		t.Fatal("connector retained a wallet after parsing failed")
+	}
 }
 
 func TestCustomTypeRegistryConcurrentSnapshots(t *testing.T) {

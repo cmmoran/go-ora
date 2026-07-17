@@ -15,11 +15,15 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"io"
 	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+const maxWalletReaderSize = 64 << 20
 
 // type CertificateData
 type Wallet struct {
@@ -47,11 +51,45 @@ func NewWallet(filePath string) (*Wallet, error) {
 	return ret, err
 }
 
+// NewWalletFromReader creates a Wallet from cwallet.sso data read from r.
+// The data is consumed and parsed before this function returns.
+func NewWalletFromReader(r io.Reader) (*Wallet, error) {
+	if r == nil || isNilWalletReader(r) {
+		return nil, errors.New("wallet reader cannot be nil")
+	}
+	data, err := io.ReadAll(io.LimitReader(r, maxWalletReaderSize+1))
+	if err != nil {
+		return nil, fmt.Errorf("read wallet: %w", err)
+	}
+	if len(data) > maxWalletReaderSize {
+		return nil, fmt.Errorf("wallet data exceeds %d bytes", maxWalletReaderSize)
+	}
+	wallet := new(Wallet)
+	return wallet, wallet.readFromBytes(data)
+}
+
+func isNilWalletReader(r io.Reader) bool {
+	value := reflect.ValueOf(r)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
+}
+
 // read will read the file data decrypting file chunk to get Wallet information
 func (w *Wallet) read() error {
 	fileData, err := os.ReadFile(w.file)
 	if err != nil {
 		return err
+	}
+	return w.readFromBytes(fileData)
+}
+
+func (w *Wallet) readFromBytes(fileData []byte) error {
+	if len(fileData) < 13 {
+		return errors.New("wallet data is too small")
 	}
 	index := 0
 	if !bytes.Equal(fileData[index:index+3], []byte{161, 248, 78}) {
@@ -81,6 +119,9 @@ func (w *Wallet) read() error {
 	if num3 == 5 {
 	} else if num3 == 6 {
 		index++
+		if size < 17 || len(fileData) < index+16 {
+			return errors.New("invalid AES wallet header size")
+		}
 		rgbKey := fileData[index : index+16]
 		index += 16
 		blk, err := aes.NewCipher(rgbKey)
@@ -89,12 +130,18 @@ func (w *Wallet) read() error {
 		}
 		dec := cipher.NewCBCDecrypter(blk, []byte{192, 52, 216, 49, 28, 2, 206, 248, 81, 240, 20, 75, 129, 237, 75, 242})
 		passwordLen := int(size) - 1 - 16
+		if passwordLen%dec.BlockSize() != 0 || len(fileData) < index+passwordLen {
+			return errors.New("invalid AES wallet password data")
+		}
 		w.password = make([]byte, passwordLen)
 		dec.CryptBlocks(w.password, fileData[index:index+passwordLen])
 		index += passwordLen
 		if autoLoginLocal {
 			hostname, _ := os.Hostname()
 			currentUser := getCurrentUser()
+			if currentUser == nil {
+				return errors.New("cannot determine current user for local auto-login wallet")
+			}
 			if idx := strings.Index(hostname, "."); idx != -1 {
 				hostname = hostname[:idx]
 			}
@@ -109,6 +156,9 @@ func (w *Wallet) read() error {
 		}
 	} else if num3 == 0x35 {
 		index++
+		if len(fileData) < index+16+0x30 {
+			return errors.New("invalid DES wallet password data")
+		}
 		rgbKey, err := hex.DecodeString(string(fileData[index : index+16]))
 		if err != nil {
 			return err
@@ -147,7 +197,7 @@ func (w *Wallet) read() error {
 	} else {
 		return errors.New("invalid Wallet header")
 	}
-	err = w.readPKCS12(fileData[index:])
+	err := w.readPKCS12(fileData[index:])
 	if err != nil {
 		if autoLoginLocal {
 			return fmt.Errorf("can't read Wallet with auto login local properties: %v", err)
@@ -168,7 +218,13 @@ func (w *Wallet) readPKCS12(data []byte) error {
 func (w *Wallet) readCredentials(input []byte) error {
 	w.Certificates = nil
 	w.credentials = nil
+	if len(input) < 2 {
+		return errors.New("invalid wallet credential data")
+	}
 	if input[1] == 130 {
+		if len(input) < 4 {
+			return errors.New("invalid wallet credential length")
+		}
 		num2 := int(input[2])*256 + int(input[3])
 		if len(input) < num2+4 {
 			num3 := num2 + 4 - len(input)

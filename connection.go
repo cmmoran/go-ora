@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"regexp"
@@ -124,6 +125,7 @@ type OracleConnector struct {
 	tlsConfig     *tls.Config
 	kerberos      configurations.KerberosAuthInterface
 	nts           configurations.NTSAuthInterface
+	wallet        *configurations.Wallet
 }
 
 func NewConnector(connString string) driver.Connector {
@@ -154,6 +156,9 @@ func (connector *OracleConnector) Connect(ctx context.Context) (driver.Conn, err
 	if conn.connOption.NTS == nil {
 		conn.connOption.NTS = connector.nts
 	}
+	if conn.connOption.Wallet == nil {
+		conn.connOption.Wallet = connector.wallet
+	}
 	err = conn.OpenWithContext(ctx)
 	if err != nil {
 		return nil, err
@@ -176,6 +181,17 @@ func (connector *OracleConnector) Dialer(dialer configurations.DialerContext) {
 
 func (connector *OracleConnector) WithTLSConfig(config *tls.Config) {
 	connector.tlsConfig = config
+}
+
+// WithWallet loads cwallet.sso data from reader for connections created by
+// this connector.
+func (connector *OracleConnector) WithWallet(reader io.Reader) error {
+	wallet, err := configurations.NewWalletFromReader(reader)
+	if err != nil {
+		return err
+	}
+	connector.wallet = wallet
+	return nil
 }
 
 // WithKerberosAuth sets the Kerberos authenticator to be used by this connector. It does not enable the Kerberos; set AUTH TYPE to KERBEROS to do so.
