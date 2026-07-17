@@ -13,6 +13,7 @@
 - None.
 
 ## Finished Tasks
+- Preserved output destinations for zero-row DML RETURNING statements and returned a successful zero-row result instead of a spurious pointer-type error.
 - Corrected pointer-slice vector construction so encoded vectors no longer contain prefixed zero elements or doubled counts.
 - Isolated negotiated string converters per connection while preserving explicitly configured converter overrides.
 - Added bounded, connector-scoped in-memory wallet loading with malformed-input and nil-reader hardening.
@@ -32,6 +33,8 @@
 
 ## Daily Log
 ### 2026-07-17
+- Corrected zero-row DML RETURNING handling by tracking whether Oracle returned each output value instead of clearing the caller's destination. Added unit coverage distinguishing no returned row from a returned SQL NULL and PL/SQL output, plus a live Oracle RAW(16)/Google UUID regression test.
+- Validated the zero-row and existing nonzero UUID RETURNING paths normally and under the race detector against Oracle Free 23.26.1. Root, compatibility-module, integration-compilation, and non-Kerberos race suites passed; repository vet remains limited by the previously recorded unkeyed `database/sql` literals.
 - Remediated the highest-value upstream parity findings in three focused commits: pointer-slice vector correctness, mixed-charset converter ownership, and connector-scoped wallet readers.
 - Verified focused unit and race tests, root and compatibility-module suites, integration compilation, and the full non-Kerberos race suite. Re-ran the live UUID/RAW(16) integration test normally and under the race detector against Oracle Free 23.26.1; both sequential runs passed.
 - Confirmed repository-wide vet remains limited to the pre-existing unkeyed `database/sql` literals and unreachable example code.
@@ -58,6 +61,8 @@
 - Organized the completed review/remediation work into local conventional commits: `e505773` value conversion/SQL parsing, `025422a` statement execution, `1e22880` network protocol handling, `4886af2` connection lifecycle/shared state, and `16be52f` DBMS output session affinity. No commits were pushed.
 
 Key files changed/added/moved:
+- changed: `command.go`, `command_test.go`, `parameter.go`, `STATE.md`
+- added: `tests/dml_returning_test.go`
 - changed: `configurations/wallet.go`, `connection.go`, `connection_test.go`, `driver.go`, `vector.go`, `STATE.md`
 - added: `configurations/wallet_reader_test.go`, `vector_test.go`
 - changed: `README.md`, `connection.go`, `converters/type_conversion.go`, `custom_types.go`, `parameter_encode.go`, `tests/go.mod`, `utils.go`, `value_getter.go`

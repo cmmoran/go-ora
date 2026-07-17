@@ -136,6 +136,7 @@ type ParameterInfo struct {
 	oPrimValue           driver.Value
 	OutputVarPtr         interface{}
 	getDataFromServer    bool
+	outputValueReceived  bool
 	oaccollid            int
 	cusType              *customType
 	parent               *ParameterInfo

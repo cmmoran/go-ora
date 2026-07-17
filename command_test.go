@@ -1,6 +1,9 @@
 package go_ora
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestNewStmt_WithComments(t *testing.T) {
 	t.Run("SELECT", func(t *testing.T) {
@@ -82,5 +85,85 @@ func TestBasicWriteRejectsTTCFieldCountOverflow(t *testing.T) {
 	stmt = &defaultStmt{columns: make([]ParameterInfo, maxTTCFieldCount+1)}
 	if err := stmt.basicWrite(0, false, false); err == nil {
 		t.Fatal("expected define column count error")
+	}
+}
+
+func TestMaterializeOutputParametersSkipsMissingDMLReturningValue(t *testing.T) {
+	destination := "unchanged"
+	stmt := &Stmt{defaultStmt: defaultStmt{
+		_hasReturnClause: true,
+		Pars: []ParameterInfo{{
+			Direction:           Output,
+			DataType:            NCHAR,
+			Value:               &destination,
+			oPrimValue:          nil,
+			outputValueReceived: false,
+		}},
+	}}
+
+	if err := stmt.materializeOutputParameters(); err != nil {
+		t.Fatal(err)
+	}
+	if destination != "unchanged" {
+		t.Fatalf("zero-row DML RETURNING changed destination to %q", destination)
+	}
+}
+
+func TestMaterializeOutputParametersStillValidatesReceivedOutput(t *testing.T) {
+	stmt := &Stmt{defaultStmt: defaultStmt{
+		_hasReturnClause: true,
+		Pars: []ParameterInfo{{
+			Direction:           Output,
+			DataType:            NCHAR,
+			Value:               "not a pointer",
+			oPrimValue:          "returned value",
+			outputValueReceived: true,
+		}},
+	}}
+
+	err := stmt.materializeOutputParameters()
+	if err == nil || !strings.Contains(err.Error(), "pointer type") {
+		t.Fatalf("expected pointer validation error, got %v", err)
+	}
+}
+
+func TestMaterializeOutputParametersAssignsReturnedNull(t *testing.T) {
+	destination := "before"
+	stmt := &Stmt{defaultStmt: defaultStmt{
+		_hasReturnClause: true,
+		Pars: []ParameterInfo{{
+			Direction:           Output,
+			DataType:            NCHAR,
+			Value:               &destination,
+			oPrimValue:          nil,
+			outputValueReceived: true,
+		}},
+	}}
+
+	if err := stmt.materializeOutputParameters(); err != nil {
+		t.Fatal(err)
+	}
+	if destination != "" {
+		t.Fatalf("expected returned SQL NULL to clear destination, got %q", destination)
+	}
+}
+
+func TestMaterializeOutputParametersDoesNotSkipPLSQLOutput(t *testing.T) {
+	destination := "before"
+	stmt := &Stmt{defaultStmt: defaultStmt{
+		stmtType: PLSQL,
+		Pars: []ParameterInfo{{
+			Direction:  Output,
+			DataType:   NCHAR,
+			Value:      &destination,
+			oPrimValue: "after",
+		}},
+	}}
+
+	if err := stmt.materializeOutputParameters(); err != nil {
+		t.Fatal(err)
+	}
+	if destination != "after" {
+		t.Fatalf("expected PL/SQL output to be materialized, got %q", destination)
 	}
 }

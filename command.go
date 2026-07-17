@@ -768,8 +768,10 @@ func (stmt *defaultStmt) read(resultSet *ResultSet) (err error) {
 						}
 						if num == 0 {
 							stmt.Pars[x].BValue = nil
-							stmt.Pars[x].Value = nil
+							stmt.Pars[x].oPrimValue = nil
+							stmt.Pars[x].outputValueReceived = false
 						} else {
+							stmt.Pars[x].outputValueReceived = true
 							err = stmt.calculateParameterValue(&stmt.Pars[x])
 							if err != nil {
 								return err
@@ -1722,6 +1724,11 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 			return nil, err
 		}
 	}
+	if stmt._hasReturnClause {
+		for index := range stmt.Pars {
+			stmt.Pars[index].outputValueReceived = false
+		}
+	}
 	session := stmt.connection.session
 	session.ResetBuffer()
 	err = stmt.write()
@@ -1735,27 +1742,9 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 		return nil, err
 	}
 	// before release results decode parameters
-	for _, par := range stmt.Pars {
-		if par.Direction != Input && par.DataType != REFCURSOR {
-			fieldValue := reflect.ValueOf(par.Value)
-			if fieldValue.Kind() != reflect.Ptr {
-				return nil, errors.New("output parameter should be pointer type")
-			}
-			fieldValue = fieldValue.Elem()
-			if par.MaxNoOfArrayElements > 0 {
-				if pars, ok := par.oPrimValue.([]ParameterInfo); ok {
-					err = setArray(fieldValue, pars)
-					if err != nil {
-						return nil, err
-					}
-				}
-			} else {
-				err = setFieldValue(fieldValue, par.cusType, par.oPrimValue)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
+	err = stmt.materializeOutputParameters()
+	if err != nil {
+		return nil, err
 	}
 	result := new(QueryResult)
 	if session.Summary != nil {
@@ -1771,6 +1760,35 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 	stmt.define = false
 	stmt.reSendParDef = false
 	return result, nil
+}
+
+func (stmt *Stmt) materializeOutputParameters() error {
+	for _, par := range stmt.Pars {
+		if par.Direction != Input && par.DataType != REFCURSOR {
+			if stmt._hasReturnClause && !par.outputValueReceived {
+				continue
+			}
+			fieldValue := reflect.ValueOf(par.Value)
+			if fieldValue.Kind() != reflect.Ptr {
+				return errors.New("output parameter should be pointer type")
+			}
+			fieldValue = fieldValue.Elem()
+			if par.MaxNoOfArrayElements > 0 {
+				if pars, ok := par.oPrimValue.([]ParameterInfo); ok {
+					err := setArray(fieldValue, pars)
+					if err != nil {
+						return err
+					}
+				}
+			} else {
+				err := setFieldValue(fieldValue, par.cusType, par.oPrimValue)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // useNamedParameters: re-arrange parameters according parameter defined in sql text
