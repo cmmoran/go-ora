@@ -1,8 +1,7 @@
 # STATE
 
 ## Open Items
-- Stabilize UUID/RAW(16) support with UUID auto-conversion as the default policy: fix `driver.Valuer` normalization in array/direct-driver binds, consolidate strict canonical/32-hex parsing, and add an explicit character wrapper for rare UUID-shaped text values.
-- Add live Oracle UUID coverage for scalar, array, nullable, output/RETURNING, and `database/sql` scan paths using Google UUID types and string wrappers.
+- Run the UUID/RAW(16) integration test against a configured Oracle instance; its scalar, array, nullable, output/RETURNING, Google UUID, and string-wrapper paths currently have compile validation only.
 - Complete the compatibility migration away from direct assignment to the exported `advanced_nego.NTSAuth` variable, then remove the legacy process-global auth hooks in a future major release.
 - Migrate callers from legacy `dbms.NewOutput(*sql.DB, ...)` to `NewOutputContext(*sql.Conn, ...)`; remove the affinity-unsafe constructor in a future major release.
 - Replace the now-bounded redirect/refuse/resend recursion with iterative state machines and add fake-transport/fuzz coverage.
@@ -13,6 +12,8 @@
 - None.
 
 ## Finished Tasks
+- Stabilized UUID/RAW(16) support with UUID-first string inference, strict canonical/compact parsing, raw-byte normalization for UUID-like valuers, and explicit `VarChar`/`NVarChar` overrides.
+- Added `UUIDString` as a canonical string representation that binds and scans Oracle `RAW(16)`, plus compile-validated live Oracle integration coverage using Google UUID types.
 - Synchronized the shared custom-type registry and connection bad-state flag, with race-detector coverage.
 - Removed DSN parsing's process-global NTS side effect, added session-owned NTS configuration, and synchronized legacy auth setters.
 - Added a pinned-session DBMS output API and made the broken legacy context helper fail explicitly.
@@ -26,6 +27,9 @@
 
 ## Daily Log
 ### 2026-07-17
+- Completed UUID/RAW(16) remediation in five focused commits: corrected UUID-like valuer and array encoding, consolidated strict string parsing, added the `VarChar` character-bind override, added `UUIDString`, and documented/tested Oracle integration behavior.
+- Verified UUID unit tests and focused race tests. Compiled the integration module with the Google UUID round-trip test; live execution remains pending because Oracle connection variables are not configured.
+- Re-ran root and compatibility-module tests plus the root race suite after UUID remediation; all passed. Repository-wide vet remains limited to pre-existing unkeyed `database/sql` literals and unreachable example code after removing a UUID-test connection-copy warning.
 - Completed the full-codebase architecture, correctness, concurrency, security, reliability, testing, maintainability, and performance review.
 - Restored synchronized custom string-converter propagation and completed quote-aware SQL comment parsing.
 - Corrected bulk-insert argument construction, zero-row behavior, shape validation, and temporary-LOB cleanup batching.
@@ -43,6 +47,8 @@
 - Organized the completed review/remediation work into local conventional commits: `e505773` value conversion/SQL parsing, `025422a` statement execution, `1e22880` network protocol handling, `4886af2` connection lifecycle/shared state, and `16be52f` DBMS output session affinity. No commits were pushed.
 
 Key files changed/added/moved:
+- changed: `README.md`, `connection.go`, `converters/type_conversion.go`, `custom_types.go`, `parameter_encode.go`, `tests/go.mod`, `utils.go`, `value_getter.go`
+- added: `converters/type_conversion_test.go`, `parameter_encode_test.go`, `tests/uuid_test.go`, `uuid.go`, `uuid_test.go`
 - changed: `bulk_copy.go`, `command.go`, `command_test.go`, `configurations/connect_config.go`, `connection.go`, `driver.go`, `network/accept_packet.go`, `network/session.go`, `utils.go`, `utils_test.go`, `value_setter.go`, `STATE.md`
 - changed: `advanced_nego/advanced_nego.go`, `advanced_nego/nts.go`, `dbms/output.go`, `parameter.go`, `parameter_encode.go`, `udt.go`
 - added: `advanced_nego/auth_state_test.go`, `configurations/connect_config_test.go`, `connection_test.go`, `dbms/output_test.go`, `network/packet_validation_test.go`, `network/session_framing_test.go`, `network/session_tls_test.go`
