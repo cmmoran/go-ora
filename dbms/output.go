@@ -3,6 +3,7 @@ package dbms
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 
@@ -11,7 +12,12 @@ import (
 
 type DBOutput struct {
 	bufferSize int
-	conn       *sql.DB
+	ctx        context.Context
+	conn       outputExecer
+}
+
+type outputExecer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 
 const (
@@ -19,6 +25,8 @@ const (
 	MinBufferSize = 2000
 	KeyInContext  = "GO-ORA.DBMS_OUTPUT"
 )
+
+var ErrEnableOutputRequiresConn = errors.New("dbms: EnableOutput cannot preserve Oracle session affinity; use EnableOutputContext with *sql.Conn")
 
 // enable oracle output for current session
 // param:
@@ -30,13 +38,22 @@ const (
 //	       gin.Context
 //	       fiber.Ctx.Context()
 //	       ...
-func EnableOutput(ctx context.Context, conn *sql.DB) error {
-	out, err := NewOutput(conn, MaxBufferSize)
+//
+// Deprecated: EnableOutput cannot return the derived context or preserve Oracle
+// session affinity through *sql.DB. Use EnableOutputContext instead.
+func EnableOutput(context.Context, *sql.DB) error {
+	return ErrEnableOutputRequiresConn
+}
+
+// EnableOutputContext enables DBMS output on a pinned Oracle session and
+// returns the context that must be passed to GetOutput and DisableOutput.
+// The caller retains ownership of conn.
+func EnableOutputContext(ctx context.Context, conn *sql.Conn) (context.Context, error) {
+	out, err := NewOutputContext(ctx, conn, MaxBufferSize)
 	if err != nil {
-		return err
+		return ctx, err
 	}
-	context.WithValue(ctx, KeyInContext, out)
-	return nil
+	return context.WithValue(ctx, KeyInContext, out), nil
 }
 
 // disable oracle output for current session
@@ -45,7 +62,11 @@ func DisableOutput(ctx context.Context) error {
 	if out == nil {
 		return fmt.Errorf("invalid context")
 	}
-	err := out.(*DBOutput).Close()
+	output, ok := out.(*DBOutput)
+	if !ok {
+		return fmt.Errorf("invalid DBMS output value %T", out)
+	}
+	err := output.Close()
 	if err != nil {
 		return err
 	}
@@ -58,7 +79,11 @@ func GetOutput(ctx context.Context) (string, error) {
 	if out == nil {
 		return "", fmt.Errorf("invalid context")
 	}
-	output, err := out.(*DBOutput).GetOutput()
+	dbOutput, ok := out.(*DBOutput)
+	if !ok {
+		return "", fmt.Errorf("invalid DBMS output value %T", out)
+	}
+	output, err := dbOutput.GetOutput()
 	if err != nil {
 		return "", err
 	}
@@ -76,8 +101,24 @@ func PrintOutput(ctx context.Context, w io.StringWriter) error {
 }
 
 func NewOutput(conn *sql.DB, bufferSize int) (*DBOutput, error) {
+	if conn == nil {
+		return nil, errors.New("dbms: nil database")
+	}
+	return newOutput(context.Background(), conn, bufferSize)
+}
+
+// NewOutputContext enables DBMS output through a caller-owned pinned session.
+func NewOutputContext(ctx context.Context, conn *sql.Conn, bufferSize int) (*DBOutput, error) {
+	if conn == nil {
+		return nil, errors.New("dbms: nil connection")
+	}
+	return newOutput(ctx, conn, bufferSize)
+}
+
+func newOutput(ctx context.Context, conn outputExecer, bufferSize int) (*DBOutput, error) {
 	output := &DBOutput{
 		bufferSize: bufferSize,
+		ctx:        ctx,
 		conn:       conn,
 	}
 	sqlText := `begin dbms_output.enable(:1); end;`
@@ -87,7 +128,7 @@ func NewOutput(conn *sql.DB, bufferSize int) (*DBOutput, error) {
 	if output.bufferSize < MinBufferSize {
 		output.bufferSize = MinBufferSize
 	}
-	_, err := output.conn.Exec(sqlText, bufferSize)
+	_, err := output.conn.ExecContext(ctx, sqlText, output.bufferSize)
 	return output, err
 }
 
@@ -120,12 +161,12 @@ end;`
 		state  int
 		output string
 	)
-	_, err := db_out.conn.Exec(sqlText, MaxBufferSize, go_ora.Out{Dest: &state},
+	_, err := db_out.conn.ExecContext(db_out.ctx, sqlText, MaxBufferSize, go_ora.Out{Dest: &state},
 		go_ora.Out{Dest: &output, Size: db_out.bufferSize})
 	return output, err
 }
 
 func (output *DBOutput) Close() error {
-	_, err := output.conn.Exec(`begin dbms_output.disable; end;`)
+	_, err := output.conn.ExecContext(output.ctx, `begin dbms_output.disable; end;`)
 	return err
 }
