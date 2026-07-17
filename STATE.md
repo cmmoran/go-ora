@@ -1,7 +1,6 @@
 # STATE
 
 ## Open Items
-- Run the UUID/RAW(16) integration test against a configured Oracle instance; its scalar, array, nullable, output/RETURNING, Google UUID, and string-wrapper paths currently have compile validation only.
 - Complete the compatibility migration away from direct assignment to the exported `advanced_nego.NTSAuth` variable, then remove the legacy process-global auth hooks in a future major release.
 - Migrate callers from legacy `dbms.NewOutput(*sql.DB, ...)` to `NewOutputContext(*sql.Conn, ...)`; remove the affinity-unsafe constructor in a future major release.
 - Replace the now-bounded redirect/refuse/resend recursion with iterative state machines and add fake-transport/fuzz coverage.
@@ -12,8 +11,9 @@
 - None.
 
 ## Finished Tasks
+- Validated the UUID/RAW(16) integration paths against a live Oracle Free 23.26.1 database, including a race-enabled run.
 - Stabilized UUID/RAW(16) support with UUID-first string inference, strict canonical/compact parsing, raw-byte normalization for UUID-like valuers, and explicit `VarChar`/`NVarChar` overrides.
-- Added `UUIDString` as a canonical string representation that binds and scans Oracle `RAW(16)`, plus compile-validated live Oracle integration coverage using Google UUID types.
+- Added `UUIDString` as a canonical string representation that binds and scans Oracle `RAW(16)`, plus live-validated Oracle integration coverage using Google UUID types.
 - Synchronized the shared custom-type registry and connection bad-state flag, with race-detector coverage.
 - Removed DSN parsing's process-global NTS side effect, added session-owned NTS configuration, and synchronized legacy auth setters.
 - Added a pinned-session DBMS output API and made the broken legacy context helper fail explicitly.
@@ -27,8 +27,9 @@
 
 ## Daily Log
 ### 2026-07-17
+- Ran `TestUUIDRaw16RoundTrip` against `gvenzl/oracle-free:23.26.1-slim-faststart` on Docker's default context. Both the ordinary and race-enabled executions passed; the disposable container was removed afterward.
 - Completed UUID/RAW(16) remediation in five focused commits: corrected UUID-like valuer and array encoding, consolidated strict string parsing, added the `VarChar` character-bind override, added `UUIDString`, and documented/tested Oracle integration behavior.
-- Verified UUID unit tests and focused race tests. Compiled the integration module with the Google UUID round-trip test; live execution remains pending because Oracle connection variables are not configured.
+- Verified UUID unit tests and focused race tests. Compiled the integration module with the Google UUID round-trip test before completing live execution in a disposable Oracle Free container.
 - Re-ran root and compatibility-module tests plus the root race suite after UUID remediation; all passed. Repository-wide vet remains limited to pre-existing unkeyed `database/sql` literals and unreachable example code after removing a UUID-test connection-copy warning.
 - Completed the full-codebase architecture, correctness, concurrency, security, reliability, testing, maintainability, and performance review.
 - Restored synchronized custom string-converter propagation and completed quote-aware SQL comment parsing.
