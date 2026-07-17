@@ -202,12 +202,30 @@ func TestGetStrConvPrefersClientConverterWhenCharsetMatches(t *testing.T) {
 	}
 }
 
-func TestDriverCloneStringConverters(t *testing.T) {
+func TestDriverDoesNotCloneNegotiatedStringConverters(t *testing.T) {
+	drv := NewDriver()
+	drv.sStrConv = converters.NewStringConverter(0x230)
+	drv.nStrConv = converters.NewStringConverter(0x7D0)
+
+	serverClone, nationalClone := drv.cloneStringConverters()
+	if serverClone != nil || nationalClone != nil {
+		t.Fatalf("negotiated converters leaked into a new connection: %v, %v", serverClone, nationalClone)
+	}
+}
+
+type testDriverProvider struct {
+	driver driver.Driver
+}
+
+func (provider testDriverProvider) Driver() driver.Driver {
+	return provider.driver
+}
+
+func TestDriverClonesExplicitStringConverters(t *testing.T) {
 	drv := NewDriver()
 	serverConv := converters.NewStringConverter(0x230)
 	nationalConv := converters.NewStringConverter(0x7D0)
-	drv.sStrConv = serverConv
-	drv.nStrConv = nationalConv
+	SetStringConverter(testDriverProvider{driver: drv}, serverConv, nationalConv)
 
 	serverClone, nationalClone := drv.cloneStringConverters()
 	if serverClone == nil || serverClone.GetLangID() != serverConv.GetLangID() {
@@ -219,6 +237,30 @@ func TestDriverCloneStringConverters(t *testing.T) {
 	if serverClone == serverConv || nationalClone == nationalConv {
 		t.Fatal("connection converters must not share mutable converter instances with the driver")
 	}
+}
+
+func TestDriverStringConverterConfigurationConcurrent(t *testing.T) {
+	drv := NewDriver()
+	provider := testDriverProvider{driver: drv}
+	serverConv := converters.NewStringConverter(0x230)
+	nationalConv := converters.NewStringConverter(0x7D0)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for index := 0; index < 100; index++ {
+			SetStringConverter(provider, serverConv, nationalConv)
+			SetStringConverter(provider, nil, nil)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for index := 0; index < 100; index++ {
+			_, _ = drv.cloneStringConverters()
+		}
+	}()
+	wg.Wait()
 }
 
 func TestCustomTypeRegistryConcurrentSnapshots(t *testing.T) {

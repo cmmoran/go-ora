@@ -16,14 +16,16 @@ import (
 )
 
 type OracleDriver struct {
-	dataCollected bool
-	cusTyp        *customTypeRegistry
-	sessionParam  map[string]string
-	mu            sync.Mutex
-	sStrConv      converters.IStringConverter
-	nStrConv      converters.IStringConverter
-	UserId        string
-	connOption    *configurations.ConnectionConfig
+	dataCollected    bool
+	cusTyp           *customTypeRegistry
+	sessionParam     map[string]string
+	mu               sync.Mutex
+	sStrConv         converters.IStringConverter
+	nStrConv         converters.IStringConverter
+	sStrConvExplicit bool
+	nStrConvExplicit bool
+	UserId           string
+	connOption       *configurations.ConnectionConfig
 	// Server    string
 	// Port      int
 	// Instance  string
@@ -62,10 +64,10 @@ func (driver *OracleDriver) cloneStringConverters() (converters.IStringConverter
 	driver.mu.Lock()
 	defer driver.mu.Unlock()
 	var charset, nCharset converters.IStringConverter
-	if driver.sStrConv != nil {
+	if driver.sStrConvExplicit && driver.sStrConv != nil {
 		charset = driver.sStrConv.Clone()
 	}
-	if driver.nStrConv != nil {
+	if driver.nStrConvExplicit && driver.nStrConv != nil {
 		nCharset = driver.nStrConv.Clone()
 	}
 	return charset, nCharset
@@ -108,6 +110,8 @@ func SetStringConverter(db GetDriverInterface, charset, nCharset converters.IStr
 		defer driver.mu.Unlock()
 		driver.sStrConv = charset
 		driver.nStrConv = nCharset
+		driver.sStrConvExplicit = charset != nil
+		driver.nStrConvExplicit = nCharset != nil
 	}
 }
 
