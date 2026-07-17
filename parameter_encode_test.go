@@ -62,6 +62,44 @@ func TestCheckNamedValuePreservesUUIDLikeValuer(t *testing.T) {
 	}
 }
 
+func TestExplicitCharacterTypesOverrideUUIDInference(t *testing.T) {
+	const uuidText = "a40b65f9-5d1d-415c-a2ac-fea0933c8d4e"
+	testConn := *conn
+	testConn.maxLen.varchar = 0x7FFF
+	testConn.maxLen.nvarchar = 0x7FFF
+	testConn.maxLen.raw = 0x7FFF
+	tests := []struct {
+		name        string
+		value       driver.Value
+		charsetForm int
+	}{
+		{name: "database charset", value: VarChar(uuidText), charsetForm: 1},
+		{name: "national charset", value: NVarChar(uuidText), charsetForm: 2},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			par := &ParameterInfo{Direction: Input, Value: test.value}
+			if err := par.encodeValue(0, &testConn); err != nil {
+				t.Fatal(err)
+			}
+			if par.DataType != NCHAR || par.CharsetForm != test.charsetForm {
+				t.Fatalf("expected character bind with form %d, got type %v form %d", test.charsetForm, par.DataType, par.CharsetForm)
+			}
+			if par.iPrimValue != uuidText {
+				t.Fatalf("expected text value %q, got %#v", uuidText, par.iPrimValue)
+			}
+		})
+	}
+
+	par := &ParameterInfo{Direction: Input, Value: uuidText}
+	if err := par.encodeValue(0, &testConn); err != nil {
+		t.Fatal(err)
+	}
+	if par.DataType != RAW || len(par.BValue) != 16 {
+		t.Fatalf("ordinary UUID string should auto-bind as RAW(16), got type %v value %x", par.DataType, par.BValue)
+	}
+}
+
 func checkParInfo(par *ParameterInfo, expPar *ParameterInfo) error {
 	if par.CharsetForm != expPar.CharsetForm {
 		return fmt.Errorf("expected charset form %v and get %v", expPar.CharsetForm, par.CharsetForm)

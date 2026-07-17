@@ -12,6 +12,7 @@ type ValueEncoder interface {
 
 type (
 	PLBool   bool
+	VarChar  string
 	NVarChar string
 	batch    struct {
 		array driver.Value
@@ -24,6 +25,16 @@ func NewBatch(array driver.Value) driver.Value {
 func (val PLBool) SetDataType(_ *Connection, par *ParameterInfo) error {
 	par.DataType = Boolean
 	par.MaxLen = converters.MAX_LEN_BOOL
+	return nil
+}
+
+// SetDataType forces a string bind to use the database character set. This can
+// be used when UUID-shaped text must remain character data.
+func (val VarChar) SetDataType(conn *Connection, par *ParameterInfo) error {
+	par.DataType = NCHAR
+	par.CharsetForm = 1
+	par.ContFlag = 16
+	par.CharsetID = conn.getDefaultCharsetID()
 	return nil
 }
 

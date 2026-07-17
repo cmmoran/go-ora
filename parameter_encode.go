@@ -30,6 +30,14 @@ func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, dat
 	for goType.Kind() == reflect.Ptr {
 		goType = goType.Elem()
 	}
+	oracleValue := data
+	value := reflect.ValueOf(data)
+	if value.Kind() == reflect.Ptr && value.IsNil() {
+		oracleValue = reflect.New(goType).Interface()
+	}
+	if temp, ok := oracleValue.(OracleTypeInterface); ok {
+		return temp.SetDataType(conn, par)
+	}
 
 	// 2- check for common types
 	if tNumber(goType) || tNullNumber(goType) {
@@ -127,13 +135,9 @@ func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, dat
 	if reflect.TypeOf(vData) != reflect.TypeOf(data) {
 		return par.setDataType(conn, reflect.TypeOf(vData), vData)
 	}
-	value := reflect.ValueOf(data)
+	value = reflect.ValueOf(data)
 	if value.Kind() == reflect.Ptr && value.IsNil() {
 		data = reflect.New(goType).Interface()
-	}
-	if temp, ok := data.(OracleTypeInterface); ok {
-		err := temp.SetDataType(conn, par)
-		return err
 	}
 	switch goType.Kind() {
 	case reflect.Array, reflect.Slice:
