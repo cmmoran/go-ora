@@ -30,6 +30,11 @@ func getValue(orig driver.Value) (driver.Value, error) {
 	}
 
 	val := v.Interface()
+	if tUUIDLikeType(v.Type()) {
+		if value, ok := tUUIDLike(val); ok {
+			return value, nil
+		}
+	}
 
 	// Handle sql.NullString explicitly
 	switch nv := val.(type) {
@@ -152,6 +157,9 @@ func getDate(col interface{}) (time.Time, error) {
 
 // get []byte from supported types
 func getBytes(col interface{}) ([]byte, error) {
+	if value, ok := tUUIDLike(col); ok {
+		return value, nil
+	}
 	var err error
 	col, err = getValue(col)
 	if err != nil {

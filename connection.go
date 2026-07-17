@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -1236,6 +1237,13 @@ func (conn *Connection) ExecContext(ctx context.Context, query string, args []dr
 }
 
 func (conn *Connection) CheckNamedValue(nv *driver.NamedValue) error {
+	return checkNamedValue(nv)
+}
+
+func checkNamedValue(nv *driver.NamedValue) error {
+	if tUUIDLikeType(reflect.TypeOf(nv.Value)) {
+		return nil
+	}
 	if _, ok := nv.Value.(driver.Valuer); ok {
 		return driver.ErrSkip
 	}

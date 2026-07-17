@@ -3,6 +3,7 @@ package go_ora
 import (
 	"bytes"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"testing"
@@ -21,6 +22,45 @@ var (
 )
 
 type testRaw16 [16]byte
+
+type testUUIDValuer [16]byte
+
+func (value testUUIDValuer) Value() (driver.Value, error) {
+	return "a40b65f9-5d1d-415c-a2ac-fea0933c8d4e", nil
+}
+
+func TestEncodeUUIDLikeValuerArrayElementsAsRawBytes(t *testing.T) {
+	values := []testUUIDValuer{
+		{0xa4, 0x0b, 0x65, 0xf9, 0x5d, 0x1d, 0x41, 0x5c, 0xa2, 0xac, 0xfe, 0xa0, 0x93, 0x3c, 0x8d, 0x4e},
+		{0x55, 0x0e, 0x84, 0x00, 0xe2, 0x9b, 0x41, 0xd4, 0xa7, 0x16, 0x44, 0x66, 0x55, 0x44, 0x00, 0x00},
+	}
+	testConn := *conn
+	testConn.maxLen.raw = 0x7FFF
+
+	for index, value := range values {
+		par := &ParameterInfo{Direction: Input, Value: value}
+		if err := par.encodeValue(0, &testConn); err != nil {
+			t.Fatalf("encode element %d: %v", index, err)
+		}
+		if par.DataType != RAW {
+			t.Fatalf("element %d: expected RAW, got %v", index, par.DataType)
+		}
+		if !bytes.Equal(par.BValue, value[:]) {
+			t.Fatalf("element %d: expected 16 UUID bytes %x, got %x", index, value, par.BValue)
+		}
+	}
+}
+
+func TestCheckNamedValuePreservesUUIDLikeValuer(t *testing.T) {
+	value := testUUIDValuer{}
+	namedValue := &driver.NamedValue{Value: value}
+	if err := (&Connection{}).CheckNamedValue(namedValue); err != nil {
+		t.Fatalf("connection converted UUID-like value through driver.Valuer: %v", err)
+	}
+	if err := (&Stmt{}).CheckNamedValue(namedValue); err != nil {
+		t.Fatalf("statement converted UUID-like value through driver.Valuer: %v", err)
+	}
+}
 
 func checkParInfo(par *ParameterInfo, expPar *ParameterInfo) error {
 	if par.CharsetForm != expPar.CharsetForm {
