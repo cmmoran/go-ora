@@ -1627,7 +1627,7 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 		if stmt.bulkExec {
 			tempType := reflect.TypeOf(args[x].Value)
 			tempVal := reflect.ValueOf(args[x].Value)
-			if args[x].Value != nil && tempType != reflect.TypeOf([]byte{}) && (tempType.Kind() == reflect.Array || tempType.Kind() == reflect.Slice) {
+			if args[x].Value != nil && !isRawByteValue(tempType) && (tempType.Kind() == reflect.Array || tempType.Kind() == reflect.Slice) {
 				// setup array count
 				if stmt.arrayBindCount == 0 {
 					stmt.arrayBindCount = tempVal.Len()
@@ -1760,6 +1760,15 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 	stmt.define = false
 	stmt.reSendParDef = false
 	return result, nil
+}
+
+// isRawByteValue reports values that represent one scalar RAW/BLOB bind rather
+// than a batch. UUID values are normalized to [16]byte before this point.
+func isRawByteValue(t reflect.Type) bool {
+	if t == nil || (t.Kind() != reflect.Slice && t.Kind() != reflect.Array) || t.Elem().Kind() != reflect.Uint8 {
+		return false
+	}
+	return t.Kind() == reflect.Slice || (t.Kind() == reflect.Array && t.Len() == 16)
 }
 
 func (stmt *Stmt) materializeOutputParameters() error {
