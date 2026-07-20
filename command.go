@@ -341,7 +341,6 @@ func NewStmt(text string, conn *Connection) *Stmt {
 		strings.HasPrefix(uCmdText, "UPDATE") ||
 		strings.HasPrefix(uCmdText, "DELETE") {
 		stmt.stmtType = DML
-		stmt.bulkExec = true
 	} else if strings.HasPrefix(uCmdText, "DECLARE") || strings.HasPrefix(uCmdText, "BEGIN") {
 		stmt.stmtType = PLSQL
 	} else {
@@ -1564,11 +1563,13 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 	useNamedPars := len(args) > 0
 	parIndex := 0
 	structPars := make([]driver.Value, 0, 2)
+	if err := stmt.configureBulkExecution(args); err != nil {
+		return nil, err
+	}
 	for x := 0; x < len(args); x++ {
 		var par *ParameterInfo
 		switch tempOut := args[x].Value.(type) {
 		case sql.Out:
-			stmt.bulkExec = false
 			direction := Output
 			if tempOut.In {
 				direction = InOut
@@ -1578,7 +1579,6 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 				return nil, err
 			}
 		case *sql.Out:
-			stmt.bulkExec = false
 			direction := Output
 			if tempOut.In {
 				direction = InOut
@@ -1588,7 +1588,6 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 				return nil, err
 			}
 		case Out:
-			stmt.bulkExec = false
 			direction := Output
 			if tempOut.In {
 				direction = InOut
@@ -1598,7 +1597,6 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 				return nil, err
 			}
 		case *Out:
-			stmt.bulkExec = false
 			direction := Output
 			if tempOut.In {
 				direction = InOut
@@ -1608,7 +1606,6 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 				return nil, err
 			}
 		case *batch:
-			stmt.bulkExec = true
 			args[x].Value = tempOut.array
 		default:
 			processedPars := 0
@@ -1617,7 +1614,6 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 				return nil, err
 			}
 			if processedPars > 0 {
-				stmt.bulkExec = false
 				stmt.connection.tracer.Printf("    %d:\n%v", x, args[x])
 				parIndex += processedPars
 				structPars = append(structPars, args[x].Value)
@@ -1627,7 +1623,10 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 		if stmt.bulkExec {
 			tempType := reflect.TypeOf(args[x].Value)
 			tempVal := reflect.ValueOf(args[x].Value)
-			if args[x].Value != nil && !isRawByteValue(tempType) && (tempType.Kind() == reflect.Array || tempType.Kind() == reflect.Slice) {
+			if args[x].Value != nil && (tempType.Kind() == reflect.Array || tempType.Kind() == reflect.Slice) {
+				if tempVal.Len() == 0 {
+					return nil, errors.New("bulk execution does not support empty batches")
+				}
 				// setup array count
 				if stmt.arrayBindCount == 0 {
 					stmt.arrayBindCount = tempVal.Len()
@@ -1654,7 +1653,7 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 								}
 								arrayValues[arrayIndex] = tempPar.Value
 							}
-							structArrayAsNamedPars = append(structArrayAsNamedPars, driver.NamedValue{Name: name, Value: arrayValues})
+							structArrayAsNamedPars = append(structArrayAsNamedPars, driver.NamedValue{Name: name, Value: NewBatch(arrayValues)})
 						}
 					}
 					if len(structArrayAsNamedPars) > 0 {
@@ -1699,10 +1698,7 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 				}
 				par.DataType = dataType
 			} else {
-				if stmt.arrayBindCount > 0 {
-					return nil, errors.New("to activate bulk insert/merge all parameters should be arrays")
-				}
-				stmt.bulkExec = false
+				return nil, errors.New("bulk execution requires array values")
 			}
 		}
 		if par == nil {
@@ -1762,13 +1758,23 @@ func (stmt *Stmt) _exec(args []driver.NamedValue) (*QueryResult, error) {
 	return result, nil
 }
 
-// isRawByteValue reports values that represent one scalar RAW/BLOB bind rather
-// than a batch. UUID values are normalized to [16]byte before this point.
-func isRawByteValue(t reflect.Type) bool {
-	if t == nil || (t.Kind() != reflect.Slice && t.Kind() != reflect.Array) || t.Elem().Kind() != reflect.Uint8 {
-		return false
+func (stmt *Stmt) configureBulkExecution(args []driver.NamedValue) error {
+	stmt.bulkExec = false
+	for _, arg := range args {
+		if _, ok := arg.Value.(*batch); ok {
+			stmt.bulkExec = true
+			break
+		}
 	}
-	return t.Kind() == reflect.Slice || (t.Kind() == reflect.Array && t.Len() == 16)
+	if !stmt.bulkExec {
+		return nil
+	}
+	for _, arg := range args {
+		if _, ok := arg.Value.(*batch); !ok {
+			return errors.New("bulk execution requires go_ora.NewBatch for every argument")
+		}
+	}
+	return nil
 }
 
 func (stmt *Stmt) materializeOutputParameters() error {

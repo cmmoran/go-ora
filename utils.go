@@ -271,6 +271,33 @@ func tUUIDLikeType(t reflect.Type) bool {
 	return t.ConvertibleTo(ty16Byte)
 }
 
+// rawByteValue converts byte slices and fixed byte arrays into a scalar RAW
+// value. Oracle array binding is explicit through NewBatch and must not be
+// inferred from a fixed-width byte value such as a digest.
+func rawByteValue(data any) ([]byte, bool) {
+	v := reflect.ValueOf(data)
+	for v.IsValid() && (v.Kind() == reflect.Interface || v.Kind() == reflect.Ptr) {
+		if v.IsNil() {
+			return nil, true
+		}
+		v = v.Elem()
+	}
+	if !v.IsValid() || (v.Kind() != reflect.Array && v.Kind() != reflect.Slice) || v.Type().Elem().Kind() != reflect.Uint8 {
+		return nil, false
+	}
+	if v.Kind() == reflect.Slice && v.IsNil() {
+		return nil, true
+	}
+	if v.Kind() == reflect.Slice {
+		return v.Bytes(), true
+	}
+	b := make([]byte, v.Len())
+	for i := range b {
+		b[i] = byte(v.Index(i).Uint())
+	}
+	return b, true
+}
+
 // asRaw16 returns a 16-byte slice if v is any T or *T whose underlying type is [16]byte,
 // or a []byte of length 16, or a UUID string in canonical form.
 func asRaw16(v reflect.Value) ([]byte, bool) {

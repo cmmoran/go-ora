@@ -38,6 +38,15 @@ func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, dat
 	if temp, ok := oracleValue.(OracleTypeInterface); ok {
 		return temp.SetDataType(conn, par)
 	}
+	if par.Direction == Input {
+		if b, ok := rawByteValue(data); ok {
+			par.DataType = RAW
+			par.MaxLen = len(b)
+			par.iPrimValue = b
+			par.Value = b
+			return nil
+		}
+	}
 
 	// 2- check for common types
 	if tNumber(goType) || tNullNumber(goType) {
