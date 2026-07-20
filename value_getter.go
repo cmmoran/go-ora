@@ -175,9 +175,20 @@ func getBytes(col interface{}) ([]byte, error) {
 		return []byte(val), nil
 	case Blob:
 		return val.Data, nil
-	default:
-		return nil, errors.New("conversion of unsupported type to []byte")
 	}
+
+	value := reflect.ValueOf(col)
+	if tRawByteType(value.Type()) {
+		if value.Kind() == reflect.Slice {
+			return value.Bytes(), nil
+		}
+		result := make([]byte, value.Len())
+		for i := range result {
+			result[i] = byte(value.Index(i).Uint())
+		}
+		return result, nil
+	}
+	return nil, errors.New("conversion of unsupported type to []byte")
 }
 
 // get lob from supported types

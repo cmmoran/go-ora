@@ -49,14 +49,3 @@ func TestDMLRejectsMixedBatchAndScalarArguments(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
-
-func TestRawByteValueTreatsFixedByteArraysAsScalar(t *testing.T) {
-	value := [32]byte{1, 2, 3}
-	got, ok := rawByteValue(value)
-	if !ok {
-		t.Fatal("fixed byte array was not recognized as a scalar RAW value")
-	}
-	if len(got) != len(value) || got[0] != 1 || got[1] != 2 || got[2] != 3 {
-		t.Fatalf("unexpected RAW bytes: %v", got)
-	}
-}

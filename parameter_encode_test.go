@@ -58,6 +58,44 @@ func TestEncodeUUIDLikeValuerArrayElementsAsRawBytes(t *testing.T) {
 	}
 }
 
+func TestEncodeFixedByteArrayAsRaw(t *testing.T) {
+	testConn := newUUIDTestConnection()
+	value := [32]byte{1, 2, 3}
+	par := &ParameterInfo{Direction: Input, Value: value}
+	if err := par.encodeValue(0, testConn); err != nil {
+		t.Fatal(err)
+	}
+	if par.DataType != RAW || !bytes.Equal(par.BValue, value[:]) {
+		t.Fatalf("fixed byte array should encode as RAW, got type %v value %x", par.DataType, par.BValue)
+	}
+}
+
+func TestEncodeTypedNilValuesPreserveTheirDeclaredType(t *testing.T) {
+	testConn := newUUIDTestConnection()
+	var timestamp *time.Time
+	var raw *[32]byte
+
+	tests := []struct {
+		name     string
+		value    driver.Value
+		dataType TNSType
+	}{
+		{name: "timestamp", value: timestamp, dataType: TimeStampTZ_DTY},
+		{name: "raw", value: raw, dataType: RAW},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			par := &ParameterInfo{Direction: Input, Value: test.value}
+			if err := par.encodeValue(0, testConn); err != nil {
+				t.Fatal(err)
+			}
+			if par.DataType != test.dataType || !par.IsNull {
+				t.Fatalf("expected NULL %v, got type %v null=%t", test.dataType, par.DataType, par.IsNull)
+			}
+		})
+	}
+}
+
 func TestCheckNamedValuePreservesUUIDLikeValuer(t *testing.T) {
 	value := testUUIDValuer{}
 	namedValue := &driver.NamedValue{Value: value}

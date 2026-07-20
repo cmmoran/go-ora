@@ -38,16 +38,6 @@ func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, dat
 	if temp, ok := oracleValue.(OracleTypeInterface); ok {
 		return temp.SetDataType(conn, par)
 	}
-	if par.Direction == Input {
-		if b, ok := rawByteValue(data); ok {
-			par.DataType = RAW
-			par.MaxLen = len(b)
-			par.iPrimValue = b
-			par.Value = b
-			return nil
-		}
-	}
-
 	// 2- check for common types
 	if tNumber(goType) || tNullNumber(goType) {
 		if goType.Implements(valuerType) || reflect.PointerTo(goType).Implements(valuerType) {
@@ -99,6 +89,13 @@ func (par *ParameterInfo) setDataType(conn *Connection, goType reflect.Type, dat
 	if tUUIDLikeType(goType) {
 		par.DataType = RAW
 		par.MaxLen = ty16Byte.Len()
+		return nil
+	}
+	if tRawByteType(goType) {
+		par.DataType = RAW
+		if goType.Kind() == reflect.Array {
+			par.MaxLen = goType.Len()
+		}
 		return nil
 	}
 	switch goType {
